@@ -47,6 +47,14 @@ or `omarchy bar set ismoil.memory display percent`.
 omarchy plugin add https://github.com/ismoil77/omarchy-memory --enable
 ```
 
+Remove: `omarchy plugin remove ismoil.memory`, then delete its entry from `shell.json` if it is still there.
+
+## Requirements
+
+`ps`, `awk` and `sort` (procps, gawk/mawk, coreutils — present on any Omarchy install) and `btop` for the
+"Open btop" button. Nothing is sent over the network. The widget reads `/proc/meminfo` and the process
+list, and signals processes only when you click **Stop** or **Force**, using your own permissions.
+
 ## Tests
 
 ```sh
