@@ -2,7 +2,7 @@
 
 RAM in the [Omarchy](https://omarchy.org) bar, with a popup that shows where it went.
 
-![The popup](docs/preview.png)
+![The popup](preview.png)
 
 Bar: `󰍛 3.0G` — free memory by default. Left click opens the popup, right click cycles the
 label (free → used → percent → icon only), middle click opens btop.
