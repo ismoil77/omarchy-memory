@@ -4,7 +4,7 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
-import "Contrast.js" as Contrast
+import "kit/Contrast.js" as Contrast
 
 // Memory widget: icon plus a free/used/percent label in the bar, and a popup
 // with the usage bar, swap, and the processes holding the most RAM.

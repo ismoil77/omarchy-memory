@@ -62,7 +62,9 @@ tests/run.sh
 ```
 
 Node tests for `Model.js` (summary, thresholds, labels, process and kill parsing), for
-`Contrast.js` against every stock theme, and for `kill-group.sh` against real processes;
+`kit/Contrast.js` against every stock theme, and for `kill-group.sh` against real processes;
 the same libraries run in Qt's engine with `qmltestrunner`; then `omarchy plugin validate`.
 
 MIT
+
+`kit/` is a copy of [omarchy-widget-kit](https://github.com/ismoil77/omarchy-widget-kit) (shared colour contrast and translation helpers); it is edited there, not here.
