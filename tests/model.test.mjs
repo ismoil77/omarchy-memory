@@ -106,6 +106,8 @@ test("parseKillResult, ownerLabel and killStatus", () => {
   assert.equal(M.killStatus({ phase: "armed" }), "")
   assert.equal(M.killStatus({ phase: "sending" }), "Stopping…")
   assert.equal(M.killStatus({ phase: "stuck" }), "Still running")
+  assert.equal(M.killStatus({ phase: "failed" }), "Unable to stop")
+  assert.equal(M.killStatus({ phase: "gone" }), "Not running")
   assert.equal(M.killStatus({ phase: "denied", owners: "root" }), "Not allowed · system (root)")
   assert.equal(M.killStatus({ phase: "partial", signalled: 2, denied: 1, owners: "bob" }), "Stopped 2 · 1 not allowed, bob")
 })

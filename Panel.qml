@@ -37,9 +37,12 @@ Panel {
   property var mem: Model.summarize({})
   property var processes: []
   // Kill progress per row name: { phase, at, signal?, signalled?, denied?, owners? }
-  // phases: armed -> sending -> sent -> (gone | stuck -> sending KILL), or denied/partial.
+  // phases: armed -> sending -> sent -> (gone | stuck -> sending KILL), or denied/partial;
+  // "failed" when the script gave no answer, "gone" when nothing by that name was running.
   property var killStates: ({})
-  readonly property string killScript: String(Qt.resolvedUrl("kill-group.sh")).replace(/^file:\/\//, "")
+  property string killing: ""
+  readonly property var phaseTtl: ({ armed: 8000, sending: 5000, gone: 3000, failed: 6000, denied: 6000, partial: 6000, stuck: 10000 })
+  readonly property string killScript: decodeURIComponent(String(Qt.resolvedUrl("kill-group.sh")).replace(/^file:\/\//, ""))
 
 
   // Level colours come from the theme: its accent while memory is fine, its
@@ -127,18 +130,22 @@ Panel {
   function sendSignal(name, sig) {
     if (killProc.running) return
     setKillState(name, { phase: "sending", signal: sig })
+    killing = name
     killProc.command = ["sh", killScript, name, sig]
     killProc.running = true
   }
 
   function applyKill(raw) {
     var r = Model.parseKillResult(raw)
-    if (!r) return
+    if (!r) {
+      if (killing !== "") setKillState(killing, { phase: "failed" })
+      return
+    }
     var sig = killStates[r.name] ? killStates[r.name].signal : "TERM"
     if (r.denied > 0 && r.signalled === 0) setKillState(r.name, { phase: "denied", owners: r.owners })
     else if (r.denied > 0) setKillState(r.name, { phase: "partial", signalled: r.signalled, denied: r.denied, owners: r.owners })
     else if (r.signalled > 0) setKillState(r.name, { phase: "sent", signal: sig })
-    else setKillState(r.name, null)
+    else setKillState(r.name, { phase: "gone" })
     refresh()
   }
 
@@ -152,12 +159,12 @@ Panel {
       var s = killStates[name]
       var age = now - s.at
       var keep = s
-      if (s.phase === "armed" && age > 8000) keep = null
-      else if ((s.phase === "denied" || s.phase === "partial") && age > 6000) keep = null
+      // "sending" that outlives its TTL means the script never answered.
+      if (s.phase === "sending" && age > phaseTtl.sending) keep = { phase: "failed", at: now }
+      else if (s.phase !== "sent" && phaseTtl[s.phase] !== undefined && age > phaseTtl[s.phase]) keep = null
       else if (s.phase === "sent" && !listed[name]) keep = null
       else if (s.phase === "sent" && age > 3000)
         keep = s.signal === "TERM" ? Object.assign({}, s, { phase: "stuck" }) : null
-      else if (s.phase === "stuck" && age > 10000) keep = null
       if (keep !== s) changed = true
       if (keep) next[name] = keep
     }
@@ -519,7 +526,7 @@ Panel {
               readonly property string killPhase: killState ? killState.phase : ""
               readonly property string killText: Model.killStatus(killState)
               readonly property bool confirming: killPhase === "armed"
-              readonly property bool refused: killPhase === "denied" || killPhase === "partial"
+              readonly property bool refused: killPhase === "denied" || killPhase === "partial" || killPhase === "failed"
               readonly property real lineHeight: Math.ceil(sizeMetrics.height)
               width: procList.width
               // Fixed height so the confirm buttons never make the list jump.

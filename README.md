@@ -65,6 +65,8 @@ Node tests for `Model.js` (summary, thresholds, labels, process and kill parsing
 `kit/Contrast.js` against every stock theme, and for `kill-group.sh` against real processes;
 the same libraries run in Qt's engine with `qmltestrunner`; then `omarchy plugin validate`.
 
+## License
+
 MIT
 
-`kit/` is a copy of [omarchy-widget-kit](https://github.com/ismoil77/omarchy-widget-kit) (shared colour contrast and translation helpers); it is edited there, not here.
+`kit/` is a copy of the shared [omarchy-widget-kit](https://github.com/ismoil77/omarchy-widget-kit); it is edited there, not here. This plugin imports only `Contrast.js` from it and is English-only.

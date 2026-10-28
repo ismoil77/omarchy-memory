@@ -155,6 +155,8 @@ function killStatus(state) {
   if (!state) return ""
   if (state.phase === "sending" || state.phase === "sent") return "Stopping…"
   if (state.phase === "stuck") return "Still running"
+  if (state.phase === "failed") return "Unable to stop"
+  if (state.phase === "gone") return "Not running"
   if (state.phase === "denied") return "Not allowed · " + ownerLabel(state.owners)
   if (state.phase === "partial")
     return "Stopped " + state.signalled + " · " + state.denied + " not allowed, " + ownerLabel(state.owners)

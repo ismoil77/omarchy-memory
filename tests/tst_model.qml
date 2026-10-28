@@ -24,6 +24,7 @@ TestCase {
     compare(Model.formatKb(Model.sumRss(list)), "3 MB")
     compare(Model.parseKillResult("node\t2\t1\troot").owners, "root")
     compare(Model.killStatus({ phase: "denied", owners: "root" }), "Not allowed · system (root)")
+    compare(Model.killStatus({ phase: "failed" }), "Unable to stop")
   }
 
   function test_yellow_stays_readable_on_a_cream_popup() {

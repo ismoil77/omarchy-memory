@@ -9,12 +9,21 @@
 # (EPERM) is reported with the owner of the process, as the system reports it.
 #
 # Prints: NAME \t signalled \t denied \t owners-of-denied (space separated)
+# An empty NAME or a SIGNAL other than TERM/KILL signals nothing, prints
+# nothing and exits 2.
 
 name=$1
 sig=${2:-TERM}
 self=$$
 
-pids=$(ps -eo pid=,rss=,args= | awk -v want="$name" '$2 > 0 { n = $3; sub(/.*\//, "", n); sub(/:$/, "", n); if (n == want) print $1 }')
+[ -n "$name" ] || { echo "kill-group.sh: no name given" >&2; exit 2; }
+case "$sig" in
+  TERM|KILL) ;;
+  *) echo "kill-group.sh: signal must be TERM or KILL" >&2; exit 2 ;;
+esac
+
+# The name travels in the environment: awk -v would expand backslash escapes in it.
+pids=$(ps -eo pid=,rss=,args= | want=$name awk '$2 > 0 { n = $3; sub(/.*\//, "", n); sub(/:$/, "", n); if (n == ENVIRON["want"]) print $1 }')
 
 ok=0
 denied=0

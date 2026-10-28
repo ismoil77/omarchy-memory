@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ismoil.memory",
   "name": "Memory",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "author": "ismoil",
   "license": "MIT",
   "description": "RAM in the bar with a popup: usage bar, swap, the programs holding the most memory (stop one in two clicks), and colours that follow your theme — accent, then yellow, then red as memory fills up.",
@@ -49,7 +49,7 @@
       {
         "key": "topProcesses",
         "type": "number",
-        "label": "Processes listed in the popup (5, 10 or 15)"
+        "label": "Processes listed (1–20; the popup offers 5, 10, 15)"
       }
     ]
   }

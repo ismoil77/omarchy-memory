@@ -56,11 +56,62 @@ test("only the exact basename matches, not a prefix or a substring", async () =>
   fs.rmSync(dir, { recursive: true })
 })
 
-test("a refused kill is counted as denied with the owner named", { skip: process.getuid() === 0 }, () => {
+// Every process whose argv[0] basename is `name`, with its owner.
+function owners(name) {
+  const ps = spawnSync("ps", ["-eo", "user=,args="], { encoding: "utf8" }).stdout.split("\n")
+  return ps.map(l => l.trim().split(/\s+/)).filter(f => f.length > 1 && f[1].split("/").pop().replace(/:$/, "") === name).map(f => f[0])
+}
+
+test("a refused kill is counted as denied with the owner named", (t) => {
+  if (process.getuid() === 0) return t.skip("root may signal anything")
   // PID 1 belongs to root; the kernel refuses a signal from a normal user.
+  // Only run if every process with that name is root's: never signal one of ours.
   const name = fs.readFileSync("/proc/1/cmdline", "utf8").split("\0")[0].split("/").pop()
-  const [, ok, denied, owners] = run(name, "TERM")
+  const who = owners(name)
+  if (who.length === 0 || who.some(u => u !== "root")) return t.skip("PID 1's name is shared with a process of this user")
+  const [, ok, denied, owner] = run(name, "TERM")
   assert.equal(ok, "0")
   assert.ok(Number(denied) >= 1)
-  assert.match(owners, /root/)
+  assert.match(owner, /root/)
+})
+
+test("an empty name signals nothing, prints nothing and fails", () => {
+  const r = spawnSync("sh", [script, "", "TERM"], { encoding: "utf8" })
+  assert.equal(r.status, 2)
+  assert.equal(r.stdout, "")
+})
+
+test("a signal other than TERM or KILL is refused, not reported as denied", async () => {
+  const { dir, bin } = fixture("memtest-sig")
+  const kid = spawn(bin, ["60"])
+  await wait(200)
+  const r = spawnSync("sh", [script, "memtest-sig", "BOGUS"], { encoding: "utf8" })
+  assert.equal(r.status, 2)
+  assert.equal(r.stdout, "")
+  assert.equal(kid.signalCode, null)
+  kid.kill("SIGKILL")
+  fs.rmSync(dir, { recursive: true })
+})
+
+test("names with spaces, backslashes or regex characters match literally", async () => {
+  const { dir, bin } = fixture("memtest-literal")
+  const kid = spawn(bin, ["60"])
+  await wait(200)
+  for (const odd of ["memtest literal", "memtest-lit\\eral", "memtest-.*", "^memtest-literal$", "memtest-literal\\n"])
+    assert.deepEqual(run(odd, "TERM"), [odd, "0", "0", ""], odd)
+  assert.equal(kid.signalCode, null)
+  kid.kill("SIGKILL")
+  fs.rmSync(dir, { recursive: true })
+})
+
+test("the script never signals itself", () => {
+  // Run it through a copy of sh called memtest-sh and ask it to stop memtest-sh.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "memkill-"))
+  const copy = path.join(dir, "memtest-sh")
+  fs.copyFileSync(spawnSync("which", ["sh"], { encoding: "utf8" }).stdout.trim(), copy)
+  fs.chmodSync(copy, 0o755)
+  const r = spawnSync(copy, [script, "memtest-sh", "TERM"], { encoding: "utf8" })
+  assert.equal(r.signal, null)
+  assert.equal(r.stdout, "memtest-sh\t0\t0\t\n")
+  fs.rmSync(dir, { recursive: true })
 })
