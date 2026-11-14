@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ismoil.memory",
   "name": "Memory",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "author": "ismoil",
   "license": "MIT",
   "description": "RAM in the bar, and a popup that tells calm from danger the way systemd-oomd does: the last 10 minutes, what RAM is made of, pressure and swap against oomd's kill lines, zram, the cache with a button to give it back, and the apps holding the most memory with their swap — open one to see its tabs or scripts, stop it in two clicks. Reads kernel files in place: no background processes. English and Russian, readable for low vision.",

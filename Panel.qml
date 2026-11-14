@@ -5,6 +5,7 @@ import qs.Commons
 import qs.Ui
 import "kit" as Kit
 import "Model.js" as Model
+import "kit/I18n.js" as I18n
 
 // Memory widget. The bar shows free/used/percent and turns yellow or red when
 // memory gets tight; the popup shows the last 10 minutes, what RAM is made of,
@@ -24,8 +25,8 @@ Panel {
   id: root
   moduleName: "ismoil.memory"
   ipcTarget: "ismoil.memory"
-  // manageIpc: false so this panel owns the single IpcHandler the target
-  // permits and can add refresh/cycleDisplay to the standard set.
+  // manageIpc: false so this panel declares its own IpcHandler and can add
+  // refresh/cycleDisplay to the standard set.
   manageIpc: false
 
   readonly property var cfg: Model.config({ language: setting("language", "auto"), locale: Qt.locale().name })
@@ -73,12 +74,21 @@ Panel {
   property var pressureHistory: []
 
   property var apps: []
+  property bool appsHovered: false
   // Rows do not change places under the pointer, while one is open or a stop waits for a click.
-  readonly property bool appsFrozen: appsHover.hovered || expanded !== "" || Object.keys(killStates).length > 0
-  // Installed apps as plain objects, for names and icons; rebuilt when they change.
-  readonly property var desktopApps: Array.prototype.map.call(DesktopEntries.applications.values, function(e) {
+  readonly property bool appsFrozen: appsHovered || expanded !== "" || Object.keys(killStates).length > 0
+  // Installed apps as plain objects, for names and icons: built with the
+  // popup (not at shell start), rebuilt when they change.
+  readonly property var desktopApps: !panel.loadedContent ? [] : Array.prototype.map.call(DesktopEntries.applications.values, function(e) {
     return { id: e.id, name: e.name, icon: e.icon, wmClass: e.startupClass, exec: e.command && e.command.length ? e.command[0] : "", cmd: e.command ? e.command.join(" ") : "" }
   })
+  // name -> entry, so a row is matched once, not at every reading.
+  readonly property var entryCache: { desktopApps; return ({}) }
+  function entryFor(name) {
+    var c = entryCache
+    if (!(name in c)) c[name] = Model.matchApp(name, desktopApps)
+    return c[name]
+  }
   // { at: ms, rss: { name: kB } }, oldest first, for "growing".
   property var snapshots: []
   // Kill progress per row name: { phase, at, signal?, signalled?, denied?, owners? }
@@ -98,7 +108,6 @@ Panel {
   property real freedKb: 0
 
   property int dangerStreak: 0
-  property real notifiedAt: 0
 
   readonly property real pressureLimit: (oom ? oom.pressureLimit : 0.6) * 100
 
@@ -135,7 +144,9 @@ Panel {
     blockLoading: true
   }
 
-  function poll() {
+  // `tick`: the regular reading. Extra ones (opening, a key, IPC) refresh the
+  // numbers but add no point to the 10-minute chart and no step to the warning.
+  function poll(tick) {
     meminfoFile.reload()
     pressureFile.reload()
     if (opened) {
@@ -162,19 +173,24 @@ Panel {
     // Keep the last good reading if a poll returns nothing.
     if (next.ready) mem = next
     pressure = Model.parsePressure(pressureFile.text())
-    memHistory = Model.pushHistory(memHistory, mem.usedFraction, historySize)
-    pressureHistory = Model.pushHistory(pressureHistory, pressure ? Math.min(1, pressure.full / pressureLimit) : 0, historySize)
+    if (tick) {
+      memHistory = Model.pushHistory(memHistory, mem.usedFraction, historySize)
+      pressureHistory = Model.pushHistory(pressureHistory, pressure ? Math.min(1, pressure.full / pressureLimit) : 0, historySize)
+      checkNotify()
+    }
     if (freeState === "freeing" && !reclaimProc.running) finishFree()
-    checkNotify()
   }
 
-  // A warning only after two danger readings in a row, then at most every 10 min.
+  // A warning after two danger readings in a row, at most every 10 minutes
+  // for the whole desktop: every bar (one per monitor) sees the same danger,
+  // and a lock folder lets only one of them speak.
   function checkNotify() {
     dangerStreak = mood.level === "danger" ? dangerStreak + 1 : 0
-    if (!notifyOn || dangerStreak !== 2 || Date.now() - notifiedAt < 600000 || notifyProc.running) return
-    notifiedAt = Date.now()
-    notifyProc.command = ["notify-send", "-u", "critical", "-a", tr("title"), "-i", "dialog-warning",
-                          tr("notifyTitle"), tr("notifyBody", { why: tr(mood.why) })]
+    if (!notifyOn || dangerStreak !== 2 || notifyProc.running) return
+    notifyProc.command = ["sh", "-c",
+      'd="${XDG_RUNTIME_DIR:-/tmp}/ismoil-memory-warned"; find "$d" -maxdepth 0 -mmin +10 -exec rmdir {} \\; 2>/dev/null; ' +
+      'mkdir "$d" 2>/dev/null || exit 0; exec notify-send -u critical -a "$1" -i dialog-warning "$2" "$3"',
+      "sh", tr("title"), tr("notifyTitle"), tr("notifyBody", { why: tr(mood.why) })]
     notifyProc.running = true
   }
 
@@ -199,6 +215,12 @@ Panel {
   function applyApps(raw) {
     var next = Model.parseApps(raw)
     if (next === null || (next.length === 0 && apps.length > 0)) return
+    // The opened app has exited (or left the list): nothing to look into any more.
+    if (expanded !== "" && !next.some(function(a) { return a.name === expanded })) {
+      expanded = ""
+      breakdown = []
+      subArmed = ""
+    }
     apps = appsFrozen ? Model.keepOrder(apps, next) : next
     var now = Date.now()
     var map = {}
@@ -306,11 +328,12 @@ Panel {
     if (changed) killStates = next
   }
 
-  // Stops only the PIDs of one inner line; the kernel decides what is allowed.
+  // The PIDs are up to 9 s old: kill-group.sh looks the app's processes up
+  // again and signals only those of them that are in this list.
   function stopPids(pids) {
     subArmed = ""
-    if (subKillProc.running) return
-    subKillProc.command = ["kill", "-TERM"].concat(pids)
+    if (subKillProc.running || expanded === "") return
+    subKillProc.command = ["sh", killScript, expanded, "TERM"].concat(pids)
     subKillProc.running = true
   }
 
@@ -356,7 +379,7 @@ Panel {
     running: true
     repeat: true
     triggeredOnStart: true
-    onTriggered: root.poll()
+    onTriggered: root.poll(true)
   }
 
   Timer {
@@ -381,7 +404,6 @@ Panel {
       expanded = ""
       breakdown = []
       subArmed = ""
-      scroller.contentY = 0
     }
   }
 
@@ -401,9 +423,8 @@ Panel {
 
   // +/- keys walk the 5/10/15 presets.
   function stepTopCount(delta) {
-    var idx = countOptions.indexOf(topCount)
-    if (idx < 0) idx = delta > 0 ? -1 : countOptions.length
-    setTopCount(countOptions[Math.max(0, Math.min(countOptions.length - 1, idx + delta))])
+    var next = Model.stepPreset(countOptions, topCount, delta)
+    if (next !== topCount) setTopCount(next)
   }
 
   function openMonitor() {
@@ -459,481 +480,491 @@ Panel {
     owner: root
     bar: root.bar
     open: root.opened
-    focusTarget: keyCatcher
+    focusTarget: panel.loadedContent
     contentWidth: panel.fittedContentWidth(Math.round(Style.space(410) * skin.textScale))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight + skin.bottomPad)
+    contentHeight: panel.fittedContentHeight(panel.loadedContentHeight + skin.bottomPad)
 
-    PanelKeyCatcher {
-      id: keyCatcher
-      anchors.fill: parent
-      onActivateRequested: root.openMonitor()
-      onCloseRequested: root.escapePressed()
-      onTabRequested: function(direction) { root.switchPanel(direction) }
-      onTextKey: function(t) {
-        if (t === "r") { root.poll(); root.refreshApps() }
-        else if (t === "m") root.cycleDisplay()
-        else if (t === "b") root.openMonitor()
-        else if (t === "+" || t === "=") root.stepTopCount(1)
-        else if (t === "-") root.stepTopCount(-1)
-      }
-
-      // Many apps or large text can outgrow the screen: it scrolls.
-      Flickable {
-        id: scroller
+    // Built the first time the popup opens, not at shell start on every monitor.
+    content: Component {
+      PanelKeyCatcher {
+        id: keyCatcher
         anchors.fill: parent
-        contentWidth: width
-        contentHeight: column.implicitHeight + skin.bottomPad
-        interactive: contentHeight > height
-        boundsBehavior: Flickable.StopAtBounds
-        clip: true
+        implicitHeight: column.implicitHeight
+        onActivateRequested: root.openMonitor()
+        onCloseRequested: root.escapePressed()
+        onTabRequested: function(direction) { root.switchPanel(direction) }
+        onTextKey: function(t) {
+          t = I18n.latinKey(t)
+          if (t === "r") { root.poll(); root.refreshApps() }
+          else if (t === "m") root.cycleDisplay()
+          else if (t === "b") root.openMonitor()
+          else if (t === "+" || t === "=") root.stepTopCount(1)
+          else if (t === "-") root.stepTopCount(-1)
+        }
 
-        Column {
-          id: column
-          width: scroller.width
-          spacing: Style.space(12)
-
-          Kit.Header {
-            width: parent.width
-            look: skin
-            glyph: root.icon
-            name: root.tr("title")
-            value: root.mem.ready ? Model.percent(root.mem.usedFraction) : "—"
-            say: !root.mem.ready ? root.tr("reading")
-               : root.mood.why !== "" ? root.tr(root.mood.why)
-               : root.tr("usedOf", { used: root.kb(root.mem.usedKb), total: root.kb(root.mem.totalKb) })
-            sayColor: root.mood.level === "calm" ? skin.dim : skin.levelText(root.kitLevel)
-            chip: root.mem.ready ? root.tr(root.mood.level) : ""
-            tone: skin.levelFill(root.kitLevel)
-            toneText: skin.levelText(root.kitLevel)
+        // Many apps or large text can outgrow the screen: it scrolls.
+        Flickable {
+          id: scroller
+          // Reopen at the top, not where it was scrolled to last time.
+          Connections {
+            target: root
+            function onOpenedChanged() { if (!root.opened) scroller.contentY = 0 }
           }
+          anchors.fill: parent
+          contentWidth: width
+          contentHeight: column.implicitHeight + skin.bottomPad
+          interactive: contentHeight > height
+          boundsBehavior: Flickable.StopAtBounds
+          clip: true
 
-          // ---------- Last 10 minutes, and what RAM is made of now ----------
-          Kit.Section {
-            width: parent.width
-            look: skin
-            caption: root.tr("chartCaption")
-            spacing: Style.space(10)
+          Column {
+            id: column
+            width: scroller.width
+            spacing: Style.space(12)
 
-          Kit.AreaChart {
-            width: parent.width
-            look: skin
-            live: root.opened
-            capacity: root.historySize
-            leftLabel: root.tr("chartAgo")
-            rightLabel: root.tr("chartNow")
-            series: [
-              { values: root.memHistory, color: skin.accentFill, fill: true, label: root.tr("chartMemory") },
-              { values: root.pressureHistory, color: skin.bad, dashed: true, label: root.tr("chartPressure") }
-            ]
-          }
-
-          // ---------- What RAM is made of ----------
-          Kit.SegmentBar {
-            width: parent.width
-            look: skin
-            segments: [
-              { value: root.mem.programsKb, color: skin.accentFill, label: root.tr("partPrograms"), text: Model.shortKb(root.mem.programsKb) },
-              { value: root.mem.cacheKb, color: skin.hue("cyan"), label: root.tr("partCache"), text: Model.shortKb(root.mem.cacheKb) },
-              { value: root.mem.zramKb, color: skin.hue("magenta"), label: root.tr("partZram"), text: Model.shortKb(root.mem.zramKb) },
-              { value: root.mem.freeKb, color: skin.track, label: root.tr("partFree"), text: Model.shortKb(root.mem.freeKb) }
-            ].filter(function(s) { return s.value > 0 })
-          }
-          }
-
-          // ---------- Pressure · swap · zram · cache ----------
-          Kit.TileRow {
-            width: parent.width
-
-            Kit.Tile {
+            Kit.Header {
+              width: parent.width
               look: skin
-              caption: root.tr("tilePressure")
-              value: root.pressure ? Model.pressureText(root.pressure.full) : "—"
-              fraction: root.pressure ? Math.min(1, root.pressure.full / (root.pressureLimit * 1.25)) : 0
-              mark: 0.8
-              fill: skin.levelFill(root.mood.why === "whyPressure" ? root.kitLevel : "good")
-              detail: root.oom ? root.tr("tilePressureKill", { limit: Math.round(root.pressureLimit) + "%", sec: root.oom.durationSec })
-                               : root.tr("tilePressureNoOomd")
+              glyph: root.icon
+              name: root.tr("title")
+              value: root.mem.ready ? Model.percent(root.mem.usedFraction) : "—"
+              say: !root.mem.ready ? root.tr("reading")
+                 : root.mood.why !== "" ? root.tr(root.mood.why)
+                 : root.tr("usedOf", { used: root.kb(root.mem.usedKb), total: root.kb(root.mem.totalKb) })
+              sayColor: root.mood.level === "calm" ? skin.dim : skin.levelText(root.kitLevel)
+              chip: root.mem.ready ? root.tr(root.mood.level) : ""
+              tone: skin.levelFill(root.kitLevel)
+              toneText: skin.levelText(root.kitLevel)
             }
 
-            Kit.Tile {
+            // ---------- Last 10 minutes, and what RAM is made of now ----------
+            Kit.Section {
+              width: parent.width
               look: skin
-              caption: root.tr("tileSwap")
-              value: root.mem.swapTotalKb > 0 ? Model.percent(root.mem.swapFraction) : root.tr("noSwap")
-              fraction: root.mem.swapTotalKb > 0 ? root.mem.swapFraction : -1
-              mark: root.oom ? root.oom.swapLimit : -1
-              fill: skin.levelFill(root.mood.why === "whySwap" ? root.kitLevel : "good")
-              detail: root.mem.swapTotalKb <= 0 ? ""
-                    : (root.oom ? root.tr("tileSwapKill", { used: root.kb(root.mem.swapUsedKb), total: root.kb(root.mem.swapTotalKb), limit: Model.percent(root.oom.swapLimit) })
-                                : root.tr("tileSwapPlain", { used: root.kb(root.mem.swapUsedKb), total: root.kb(root.mem.swapTotalKb) }))
-                      + (root.rate.inKb + root.rate.outKb >= 64
-                         ? "\n" + root.tr("tileSwapRate", { in: root.kb(root.rate.inKb), out: root.kb(root.rate.outKb) }) : "")
+              caption: root.tr("chartCaption")
+              spacing: Style.space(10)
+
+            Kit.AreaChart {
+              width: parent.width
+              look: skin
+              live: root.opened
+              capacity: root.historySize
+              leftLabel: root.tr("chartAgo")
+              rightLabel: root.tr("chartNow")
+              series: [
+                { values: root.memHistory, color: skin.accentFill, fill: true, label: root.tr("chartMemory") },
+                { values: root.pressureHistory, color: skin.bad, dashed: true, label: root.tr("chartPressure") }
+              ]
             }
 
-          }
-
-          Kit.TileRow {
-            width: parent.width
-
-            Kit.Tile {
-              visible: root.zram !== null && root.zram.origKb > 0
+            // ---------- What RAM is made of ----------
+            Kit.SegmentBar {
+              width: parent.width
               look: skin
-              caption: root.tr("tileZram")
-              value: Model.ratioText(root.cfg, root.zram)
-              detail: root.zram ? root.tr("tileZramDetail", { orig: root.kb(root.zram.origKb), used: root.kb(root.zram.usedKb) }) : ""
+              segments: [
+                { value: root.mem.programsKb, color: skin.accentFill, label: root.tr("partPrograms"), text: Model.shortKb(root.mem.programsKb) },
+                { value: root.mem.cacheKb, color: skin.hue("cyan"), label: root.tr("partCache"), text: Model.shortKb(root.mem.cacheKb) },
+                { value: root.mem.zramKb, color: skin.hue("magenta"), label: root.tr("partZram"), text: Model.shortKb(root.mem.zramKb) },
+                { value: root.mem.freeKb, color: skin.track, label: root.tr("partFree"), text: Model.shortKb(root.mem.freeKb) }
+              ].filter(function(s) { return s.value > 0 })
+            }
             }
 
-            Kit.Tile {
-              look: skin
-              caption: root.tr("tileCache")
-              value: root.kb(root.mem.cacheKb)
-              detail: root.freeState === "freeing" ? root.tr("freeing")
-                    : root.freeState === "done" ? (root.freedKb >= 1024 ? root.tr("freed", { n: root.kb(root.freedKb) }) : root.tr("freedNone"))
-                    : root.tr("tileCacheDetail")
-            }
-          }
+            // ---------- Pressure · swap · zram · cache ----------
+            Kit.TileRow {
+              width: parent.width
 
-          // ---------- Apps ----------
-          Kit.Section {
-            id: appsCard
-            width: parent.width
-            look: skin
-            caption: root.tr("sectionApps")
-            spacing: Style.space(2)
-            trailing: [
-              Repeater {
-                model: root.countOptions
-                delegate: Kit.ActionButton {
-                  required property var modelData
-                  look: skin
-                  compact: true
-                  text: String(modelData)
-                  selected: root.topCount === modelData
-                  onClicked: root.setTopCount(modelData)
-                }
+              Kit.Tile {
+                look: skin
+                caption: root.tr("tilePressure")
+                value: root.pressure ? Model.pressureText(root.pressure.full) : "—"
+                fraction: root.pressure ? Math.min(1, root.pressure.full / (root.pressureLimit * 1.25)) : 0
+                mark: 0.8
+                fill: skin.levelFill(root.mood.why === "whyPressure" ? root.kitLevel : "good")
+                detail: root.oom ? root.tr("tilePressureKill", { limit: Math.round(root.pressureLimit) + "%", sec: root.oom.durationSec })
+                                 : root.tr("tilePressureNoOomd")
               }
-            ]
 
-            HoverHandler { id: appsHover }
+              Kit.Tile {
+                look: skin
+                caption: root.tr("tileSwap")
+                value: root.mem.swapTotalKb > 0 ? Model.percent(root.mem.swapFraction) : root.tr("noSwap")
+                fraction: root.mem.swapTotalKb > 0 ? root.mem.swapFraction : -1
+                mark: root.oom ? root.oom.swapLimit : -1
+                fill: skin.levelFill(root.mood.why === "whySwap" ? root.kitLevel : "good")
+                detail: root.mem.swapTotalKb <= 0 ? ""
+                      : (root.oom ? root.tr("tileSwapKill", { used: root.kb(root.mem.swapUsedKb), total: root.kb(root.mem.swapTotalKb), limit: Model.percent(root.oom.swapLimit) })
+                                  : root.tr("tileSwapPlain", { used: root.kb(root.mem.swapUsedKb), total: root.kb(root.mem.swapTotalKb) }))
+                        + (root.rate.inKb + root.rate.outKb >= 64
+                           ? "\n" + root.tr("tileSwapRate", { in: root.kb(root.rate.inKb), out: root.kb(root.rate.outKb) }) : "")
+              }
 
-            Text {
-              visible: root.apps.length === 0
-              textFormat: Text.PlainText
-              text: root.tr("collecting")
-              color: skin.dim
-              font.family: skin.fontFamily
-              font.pixelSize: skin.small
             }
 
-            Repeater {
-              model: root.apps
+            Kit.TileRow {
+              width: parent.width
 
-              // Normal:   [icon] Name ×3 ↑            1.9 GB   (hover: ×)
-              //                  +1.6 GB in swap
-              // Confirm:  [icon] Name ········ [Cancel] [Stop]
-              // Result:   [icon] Name ····· status text [Force]
-              delegate: Column {
-                id: appRow
-                required property var modelData
-                readonly property bool open: root.expanded === modelData.name
-                // The desktop entry gives a real name and icon.
-                readonly property var entry: Model.matchApp(modelData.name, root.desktopApps)
-                readonly property string title: entry && entry.name ? entry.name : modelData.name
-                width: appsCard.width - appsCard.padding * 2
+              Kit.Tile {
+                visible: root.zram !== null && root.zram.origKb > 0
+                look: skin
+                caption: root.tr("tileZram")
+                value: Model.ratioText(root.cfg, root.zram)
+                detail: root.zram ? root.tr("tileZramDetail", { orig: root.kb(root.zram.origKb), used: root.kb(root.zram.usedKb) }) : ""
+              }
 
-                Item {
-                  id: appItem
-                  readonly property var killState: root.killStates[appRow.modelData.name]
-                  readonly property string killPhase: killState ? killState.phase : ""
-                  readonly property string killText: Model.killStatus(root.cfg, killState)
-                  readonly property bool confirming: killPhase === "armed"
-                  readonly property bool refused: killPhase === "denied" || killPhase === "partial" || killPhase === "failed"
-                  readonly property bool growing: Model.isGrowing(appRow.modelData.name, appRow.modelData.rssKb, root.snapshots, Date.now())
-                  width: parent.width
-                  implicitHeight: Math.max(appIcon.height, nameCol.implicitHeight) + Style.space(10)
+              Kit.Tile {
+                look: skin
+                caption: root.tr("tileCache")
+                value: root.kb(root.mem.cacheKb)
+                detail: root.freeState === "freeing" ? root.tr("freeing")
+                      : root.freeState === "done" ? (root.freedKb >= 1024 ? root.tr("freed", { n: root.kb(root.freedKb) }) : root.tr("freedNone"))
+                      : root.tr("tileCacheDetail")
+              }
+            }
 
-                  HoverHandler { id: appHover }
-
-                  Rectangle {
-                    anchors.fill: parent
-                    radius: Math.min(6, skin.radius)
-                    color: appItem.confirming || appItem.refused ? Util.alpha(skin.bad, 0.14)
-                         : appRow.open ? Util.alpha(skin.ink, 0.07)
-                         : Util.alpha(skin.ink, appHover.hovered ? 0.05 : 0)
-                    Behavior on color { ColorAnimation { duration: 120 } }
-                  }
-
-                  Kit.AppIcon {
-                    id: appIcon
-                    look: skin
-                    size: Math.round(skin.small * 1.9)
-                    name: appRow.title
-                    source: Quickshell.iconPath(appRow.entry && appRow.entry.icon ? appRow.entry.icon : appRow.modelData.name, true)
-                    anchors.left: parent.left
-                    anchors.leftMargin: Style.space(4)
-                    anchors.verticalCenter: parent.verticalCenter
-                  }
-
-                  Column {
-                    id: nameCol
-                    anchors.left: appIcon.right
-                    anchors.leftMargin: Style.space(10)
-                    anchors.right: tail.left
-                    anchors.rightMargin: Style.space(8)
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: Style.space(1)
-
-                    Text {
-                      width: parent.width
-                      textFormat: Text.PlainText
-                      text: (appRow.open ? "▾ " : "") + appRow.title
-                            + (appRow.modelData.count > 1 ? "  ×" + appRow.modelData.count : "")
-                      color: skin.ink
-                      font.family: skin.fontFamily
-                      font.pixelSize: skin.small
-                      font.bold: appRow.open
-                      elide: Text.ElideRight
-                    }
-
-                    Text {
-                      visible: text !== ""
-                      width: parent.width
-                      textFormat: Text.PlainText
-                      text: [appRow.title.toLowerCase() !== appRow.modelData.name.toLowerCase() ? appRow.modelData.name : "",
-                             appItem.growing ? root.tr("growing") : "",
-                             appRow.modelData.swapKb >= 50 * 1024 ? root.tr("inSwap", { n: root.kb(appRow.modelData.swapKb) }) : ""]
-                            .filter(function(t) { return t !== "" }).join(" · ")
-                      color: appItem.growing ? skin.warnText : skin.dim
-                      font.family: skin.fontFamily
-                      font.pixelSize: skin.small
-                      elide: Text.ElideRight
-                    }
-                  }
-
-                  MouseArea {
-                    anchors.left: parent.left
-                    anchors.right: tail.left
-                    anchors.top: parent.top
-                    anchors.bottom: parent.bottom
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.toggleExpanded(appRow.modelData.name)
-                  }
-
-                  Row {
-                    id: tail
-                    anchors.right: parent.right
-                    anchors.rightMargin: Style.space(4)
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: Style.space(6)
-
-                    // Normal: the size, or the stop button under the pointer.
-                    Item {
-                      visible: appItem.killPhase === ""
-                      width: sizeMetrics.width
-                      height: sizeMetrics.height + Style.space(4)
-
-                      Text {
-                        anchors.fill: parent
-                        visible: !appHover.hovered
-                        horizontalAlignment: Text.AlignRight
-                        verticalAlignment: Text.AlignVCenter
-                        textFormat: Text.PlainText
-                        text: root.kb(appRow.modelData.rssKb)
-                        color: skin.ink
-                        font.family: skin.fontFamily
-                        font.pixelSize: skin.small
-                        font.bold: true
-                        font.features: { "tnum": 1 }
-                      }
-
-                      Kit.ActionButton {
-                        look: skin
-                        compact: true
-                        danger: true
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        visible: appHover.hovered
-                        iconText: "󰅖"
-                        text: root.tr("stop")
-                        onClicked: root.armKill(appRow.modelData.name)
-                      }
-                    }
-
-                    Kit.ActionButton {
-                      look: skin
-                      compact: true
-                      visible: appItem.confirming
-                      text: root.tr("cancel")
-                      onClicked: root.cancelKill(appRow.modelData.name)
-                    }
-
-                    Kit.ActionButton {
-                      look: skin
-                      compact: true
-                      danger: true
-                      visible: appItem.confirming
-                      text: appRow.modelData.count > 1 ? root.tr("stopN", { n: appRow.modelData.count }) : root.tr("stop")
-                      onClicked: root.sendSignal(appRow.modelData.name, "TERM")
-                    }
-
-                    Text {
-                      visible: appItem.killText !== ""
-                      textFormat: Text.PlainText
-                      text: appItem.killText
-                      color: appItem.refused ? skin.badText : skin.dim
-                      font.family: skin.fontFamily
-                      font.pixelSize: skin.small
-                      anchors.verticalCenter: parent.verticalCenter
-                    }
-
-                    Kit.ActionButton {
-                      look: skin
-                      compact: true
-                      danger: true
-                      visible: appItem.killPhase === "stuck"
-                      text: root.tr("force")
-                      onClicked: root.sendSignal(appRow.modelData.name, "KILL")
-                    }
-                  }
-                }
-
-                // What is inside the row: Chrome tabs/extensions/GPU, or one line per
-                // script and project folder (node, php, claude ...).
-                Text {
-                  visible: appRow.open && root.breakdown.length === 0
-                  leftPadding: appIcon.width + Style.space(14)
-                  topPadding: Style.space(2)
-                  bottomPadding: Style.space(4)
-                  textFormat: Text.PlainText
-                  text: root.tr("lookingInside")
-                  color: skin.dim
-                  font.family: skin.fontFamily
-                  font.pixelSize: skin.small
-                }
-
+            // ---------- Apps ----------
+            Kit.Section {
+              id: appsCard
+              width: parent.width
+              look: skin
+              caption: root.tr("sectionApps")
+              spacing: Style.space(2)
+              trailing: [
                 Repeater {
-                  model: appRow.open ? root.breakdown : []
-
-                  delegate: Item {
-                    id: subItem
+                  model: root.countOptions
+                  delegate: Kit.ActionButton {
                     required property var modelData
-                    readonly property bool armed: root.subArmed === modelData.name
-                    width: appRow.width
-                    implicitHeight: sizeMetrics.height + Style.space(8)
+                    look: skin
+                    compact: true
+                    text: String(modelData)
+                    selected: root.topCount === modelData
+                    onClicked: root.setTopCount(modelData)
+                  }
+                }
+              ]
 
-                    HoverHandler { id: subHover }
+              HoverHandler { onHoveredChanged: root.appsHovered = hovered }
+
+              Text {
+                visible: root.apps.length === 0
+                textFormat: Text.PlainText
+                text: root.tr("collecting")
+                color: skin.dim
+                font.family: skin.fontFamily
+                font.pixelSize: skin.small
+              }
+
+              Repeater {
+                model: root.apps
+
+                // Normal:   [icon] Name ×3 ↑            1.9 GB   (hover: ×)
+                //                  +1.6 GB in swap
+                // Confirm:  [icon] Name ········ [Cancel] [Stop]
+                // Result:   [icon] Name ····· status text [Force]
+                delegate: Column {
+                  id: appRow
+                  required property var modelData
+                  readonly property bool open: root.expanded === modelData.name
+                  // The desktop entry gives a real name and icon.
+                  readonly property var entry: root.entryFor(modelData.name)
+                  readonly property string title: entry && entry.name ? entry.name : modelData.name
+                  width: appsCard.width - appsCard.padding * 2
+
+                  Item {
+                    id: appItem
+                    readonly property var killState: root.killStates[appRow.modelData.name]
+                    readonly property string killPhase: killState ? killState.phase : ""
+                    readonly property string killText: Model.killStatus(root.cfg, killState)
+                    readonly property bool confirming: killPhase === "armed"
+                    readonly property bool refused: killPhase === "denied" || killPhase === "partial" || killPhase === "failed"
+                    readonly property bool growing: Model.isGrowing(appRow.modelData.name, appRow.modelData.rssKb, root.snapshots, Date.now())
+                    width: parent.width
+                    implicitHeight: Math.max(appIcon.height, nameCol.implicitHeight) + Style.space(10)
+
+                    HoverHandler { id: appHover }
 
                     Rectangle {
                       anchors.fill: parent
-                      anchors.leftMargin: appIcon.width + Style.space(8)
-                      radius: Math.min(4, skin.radius)
-                      color: subItem.armed ? Util.alpha(skin.bad, 0.14) : Util.alpha(skin.ink, subHover.hovered ? 0.05 : 0)
+                      radius: Math.min(6, skin.radius)
+                      color: appItem.confirming || appItem.refused ? Util.alpha(skin.bad, 0.14)
+                           : appRow.open ? Util.alpha(skin.ink, 0.07)
+                           : Util.alpha(skin.ink, appHover.hovered ? 0.05 : 0)
+                      Behavior on color { ColorAnimation { duration: 120 } }
                     }
 
-                    // A thin guide line ties the inner lines to their app.
-                    Rectangle {
-                      x: Style.space(4) + appIcon.width / 2
-                      width: 1
-                      height: parent.height
-                      color: skin.track
-                    }
-
-                    Text {
+                    Kit.AppIcon {
+                      id: appIcon
+                      look: skin
+                      size: Math.round(skin.small * 1.9)
+                      name: appRow.title
+                      source: Quickshell.iconPath(appRow.entry && appRow.entry.icon ? appRow.entry.icon : appRow.modelData.name, true)
                       anchors.left: parent.left
-                      anchors.leftMargin: appIcon.width + Style.space(14)
-                      anchors.right: subTail.left
+                      anchors.leftMargin: Style.space(4)
+                      anchors.verticalCenter: parent.verticalCenter
+                    }
+
+                    Column {
+                      id: nameCol
+                      anchors.left: appIcon.right
+                      anchors.leftMargin: Style.space(10)
+                      anchors.right: tail.left
                       anchors.rightMargin: Style.space(8)
                       anchors.verticalCenter: parent.verticalCenter
-                      textFormat: Text.PlainText
-                      text: subItem.modelData.name + (subItem.modelData.count > 1 ? "  ×" + subItem.modelData.count : "")
-                      color: skin.ink
-                      font.family: skin.fontFamily
-                      font.pixelSize: skin.small
-                      elide: Text.ElideMiddle
+                      spacing: Style.space(1)
+
+                      Text {
+                        width: parent.width
+                        textFormat: Text.PlainText
+                        text: (appRow.open ? "▾ " : "") + appRow.title
+                              + (appRow.modelData.count > 1 ? "  ×" + appRow.modelData.count : "")
+                        color: skin.ink
+                        font.family: skin.fontFamily
+                        font.pixelSize: skin.small
+                        font.bold: appRow.open
+                        elide: Text.ElideRight
+                      }
+
+                      Text {
+                        visible: text !== ""
+                        width: parent.width
+                        textFormat: Text.PlainText
+                        text: [appRow.title.toLowerCase() !== appRow.modelData.name.toLowerCase() ? appRow.modelData.name : "",
+                               appItem.growing ? root.tr("growing") : "",
+                               appRow.modelData.swapKb >= 50 * 1024 ? root.tr("inSwap", { n: root.kb(appRow.modelData.swapKb) }) : ""]
+                              .filter(function(t) { return t !== "" }).join(" · ")
+                        color: appItem.growing ? skin.warnText : skin.dim
+                        font.family: skin.fontFamily
+                        font.pixelSize: skin.small
+                        elide: Text.ElideRight
+                      }
+                    }
+
+                    MouseArea {
+                      anchors.left: parent.left
+                      anchors.right: tail.left
+                      anchors.top: parent.top
+                      anchors.bottom: parent.bottom
+                      cursorShape: Qt.PointingHandCursor
+                      onClicked: root.toggleExpanded(appRow.modelData.name)
                     }
 
                     Row {
-                      id: subTail
+                      id: tail
                       anchors.right: parent.right
                       anchors.rightMargin: Style.space(4)
                       anchors.verticalCenter: parent.verticalCenter
                       spacing: Style.space(6)
 
+                      // Normal: the size, or the stop button under the pointer.
+                      Item {
+                        visible: appItem.killPhase === ""
+                        width: sizeMetrics.width
+                        height: sizeMetrics.height + Style.space(4)
+
+                        Text {
+                          anchors.fill: parent
+                          visible: !appHover.hovered
+                          horizontalAlignment: Text.AlignRight
+                          verticalAlignment: Text.AlignVCenter
+                          textFormat: Text.PlainText
+                          text: root.kb(appRow.modelData.rssKb)
+                          color: skin.ink
+                          font.family: skin.fontFamily
+                          font.pixelSize: skin.small
+                          font.bold: true
+                          font.features: { "tnum": 1 }
+                        }
+
+                        Kit.ActionButton {
+                          look: skin
+                          compact: true
+                          danger: true
+                          anchors.right: parent.right
+                          anchors.verticalCenter: parent.verticalCenter
+                          visible: appHover.hovered
+                          iconText: "󰅖"
+                          text: root.tr("stop")
+                          onClicked: root.armKill(appRow.modelData.name)
+                        }
+                      }
+
+                      Kit.ActionButton {
+                        look: skin
+                        compact: true
+                        visible: appItem.confirming
+                        text: root.tr("cancel")
+                        onClicked: root.cancelKill(appRow.modelData.name)
+                      }
+
+                      Kit.ActionButton {
+                        look: skin
+                        compact: true
+                        danger: true
+                        visible: appItem.confirming
+                        text: appRow.modelData.count > 1 ? root.tr("stopN", { n: appRow.modelData.count }) : root.tr("stop")
+                        onClicked: root.sendSignal(appRow.modelData.name, "TERM")
+                      }
+
                       Text {
-                        visible: !subItem.armed && !subHover.hovered
+                        visible: appItem.killText !== ""
                         textFormat: Text.PlainText
-                        text: root.kb(subItem.modelData.rssKb)
-                        color: skin.dim
+                        text: appItem.killText
+                        color: appItem.refused ? skin.badText : skin.dim
                         font.family: skin.fontFamily
                         font.pixelSize: skin.small
-                        font.features: { "tnum": 1 }
+                        anchors.verticalCenter: parent.verticalCenter
                       }
 
                       Kit.ActionButton {
                         look: skin
                         compact: true
                         danger: true
-                        visible: subHover.hovered && !subItem.armed
-                        iconText: "󰅖"
-                        text: root.tr("stop")
-                        onClicked: root.subArmed = subItem.modelData.name
+                        visible: appItem.killPhase === "stuck"
+                        text: root.tr("force")
+                        onClicked: root.sendSignal(appRow.modelData.name, "KILL")
+                      }
+                    }
+                  }
+
+                  // What is inside the row: Chrome tabs/extensions/GPU, or one line per
+                  // script and project folder (node, php, claude ...).
+                  Text {
+                    visible: appRow.open && root.breakdown.length === 0
+                    leftPadding: appIcon.width + Style.space(14)
+                    topPadding: Style.space(2)
+                    bottomPadding: Style.space(4)
+                    textFormat: Text.PlainText
+                    text: root.tr("lookingInside")
+                    color: skin.dim
+                    font.family: skin.fontFamily
+                    font.pixelSize: skin.small
+                  }
+
+                  Repeater {
+                    model: appRow.open ? root.breakdown : []
+
+                    delegate: Item {
+                      id: subItem
+                      required property var modelData
+                      readonly property bool armed: root.subArmed === modelData.name
+                      width: appRow.width
+                      implicitHeight: sizeMetrics.height + Style.space(8)
+
+                      HoverHandler { id: subHover }
+
+                      Rectangle {
+                        anchors.fill: parent
+                        anchors.leftMargin: appIcon.width + Style.space(8)
+                        radius: Math.min(4, skin.radius)
+                        color: subItem.armed ? Util.alpha(skin.bad, 0.14) : Util.alpha(skin.ink, subHover.hovered ? 0.05 : 0)
                       }
 
-                      Kit.ActionButton {
-                        look: skin
-                        compact: true
-                        visible: subItem.armed
-                        text: root.tr("cancel")
-                        onClicked: root.subArmed = ""
+                      // A thin guide line ties the inner lines to their app.
+                      Rectangle {
+                        x: Style.space(4) + appIcon.width / 2
+                        width: 1
+                        height: parent.height
+                        color: skin.track
                       }
 
-                      Kit.ActionButton {
-                        look: skin
-                        compact: true
-                        danger: true
-                        visible: subItem.armed
-                        text: subItem.modelData.pids.length > 1 ? root.tr("stopN", { n: subItem.modelData.pids.length }) : root.tr("stop")
-                        onClicked: root.stopPids(subItem.modelData.pids)
+                      Text {
+                        anchors.left: parent.left
+                        anchors.leftMargin: appIcon.width + Style.space(14)
+                        anchors.right: subTail.left
+                        anchors.rightMargin: Style.space(8)
+                        anchors.verticalCenter: parent.verticalCenter
+                        textFormat: Text.PlainText
+                        text: subItem.modelData.name + (subItem.modelData.count > 1 ? "  ×" + subItem.modelData.count : "")
+                        color: skin.ink
+                        font.family: skin.fontFamily
+                        font.pixelSize: skin.small
+                        elide: Text.ElideMiddle
+                      }
+
+                      Row {
+                        id: subTail
+                        anchors.right: parent.right
+                        anchors.rightMargin: Style.space(4)
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: Style.space(6)
+
+                        Text {
+                          visible: !subItem.armed && !subHover.hovered
+                          textFormat: Text.PlainText
+                          text: root.kb(subItem.modelData.rssKb)
+                          color: skin.dim
+                          font.family: skin.fontFamily
+                          font.pixelSize: skin.small
+                          font.features: { "tnum": 1 }
+                        }
+
+                        Kit.ActionButton {
+                          look: skin
+                          compact: true
+                          danger: true
+                          visible: subHover.hovered && !subItem.armed
+                          iconText: "󰅖"
+                          text: root.tr("stop")
+                          onClicked: root.subArmed = subItem.modelData.name
+                        }
+
+                        Kit.ActionButton {
+                          look: skin
+                          compact: true
+                          visible: subItem.armed
+                          text: root.tr("cancel")
+                          onClicked: root.subArmed = ""
+                        }
+
+                        Kit.ActionButton {
+                          look: skin
+                          compact: true
+                          danger: true
+                          visible: subItem.armed
+                          text: subItem.modelData.pids.length > 1 ? root.tr("stopN", { n: subItem.modelData.pids.length }) : root.tr("stop")
+                          onClicked: root.stopPids(subItem.modelData.pids)
+                        }
                       }
                     }
                   }
                 }
               }
             }
-          }
 
-          // ---------- Actions ----------
-          Kit.ActionRow {
-            width: parent.width
+            // ---------- Actions ----------
+            Kit.ActionRow {
+              width: parent.width
 
-            Kit.ActionButton {
-              visible: root.appSlice !== ""
-              enabled: root.freeState === ""
-              look: skin
-              iconText: "󰃢"
-              text: root.freeState === "freeing" ? root.tr("freeing") : root.tr("freeCache")
-              primary: true
-              onClicked: root.freeCache()
+              Kit.ActionButton {
+                visible: root.appSlice !== ""
+                enabled: root.freeState === ""
+                look: skin
+                iconText: "󰃢"
+                text: root.freeState === "freeing" ? root.tr("freeing") : root.tr("freeCache")
+                primary: true
+                onClicked: root.freeCache()
+              }
+              Kit.ActionButton {
+                look: skin
+                iconText: "󰆍"
+                text: "btop"
+                onClicked: root.openMonitor()
+              }
+              Kit.ActionButton {
+                look: skin
+                iconText: "󰈈"
+                text: Model.modeLabel(root.cfg, root.display)
+                onClicked: root.cycleDisplay()
+              }
             }
-            Kit.ActionButton {
-              look: skin
-              iconText: "󰆍"
-              text: "btop"
-              onClicked: root.openMonitor()
-            }
-            Kit.ActionButton {
-              look: skin
-              iconText: "󰈈"
-              text: Model.modeLabel(root.cfg, root.display)
-              onClicked: root.cycleDisplay()
-            }
-          }
 
-          Kit.Signature {
-            width: parent.width
-            look: skin
-            widget: "memory"
-            extra: root.oom ? "systemd-oomd" : ""
-            version: root.version
+            Kit.Signature {
+              width: parent.width
+              look: skin
+              widget: "memory"
+              extra: root.oom ? "systemd-oomd" : ""
+              version: root.version
+            }
           }
         }
       }

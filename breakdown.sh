@@ -52,7 +52,7 @@ while read -r pid rss; do
           found=${a##*/}
         fi
       done
-      echo "$found"
+      printf '%s\n' "$found"
     })
     case $dir in ""|/|"$HOME") place= ;; *) place=${dir##*/} ;; esac
     label="${script}${script:+${place:+ · }}${place}"

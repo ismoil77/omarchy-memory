@@ -1,7 +1,7 @@
 #!/bin/sh
 # Signal every process in one row of the popup's list.
 #
-#   kill-group.sh NAME SIGNAL      (SIGNAL: TERM or KILL)
+#   kill-group.sh NAME SIGNAL [PID...]     (SIGNAL: TERM or KILL)
 #
 # Rows group by basename of argv[0], so the PIDs are looked up again here with
 # the same rule instead of trusting a list that may be seconds old. Nothing is
@@ -24,6 +24,18 @@ esac
 
 # The name travels in the environment: awk -v would expand backslash escapes in it.
 pids=$(ps -eo pid=,rss=,args= | want=$name awk '$2 > 0 { n = $3; sub(/.*\//, "", n); sub(/:$/, "", n); if (n == ENVIRON["want"]) print $1 }')
+
+# Extra arguments are PIDs: only those of the row's processes are signalled
+# (an inner line of the popup). A PID that is not one of them any more is skipped.
+shift 2 2>/dev/null || shift $#
+if [ $# -gt 0 ]; then
+  only=" $* "
+  kept=""
+  for p in $pids; do
+    case "$only" in *" $p "*) kept="$kept $p" ;; esac
+  done
+  pids=$kept
+fi
 
 ok=0
 denied=0

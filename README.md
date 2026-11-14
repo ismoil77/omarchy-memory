@@ -31,14 +31,15 @@ percent → icon only), middle click opens btop.
   - **stop** an app or one line inside it: hover, **Stop**, confirm. If it is still running ~3 s
     later the row offers **Force** (SIGKILL). The kernel decides what may be stopped:
     `Not allowed · system (root)`.
-- a warning notification when memory nears oomd's line (twice in a row, at most every 10 minutes)
+- one warning notification when memory nears oomd's line (two readings in a row; at most every
+  10 minutes, whatever the number of monitors)
 
 Keys: `Esc` close · `Enter`/`b` btop · `m` bar label · `r` refresh · `+`/`-` more/fewer apps · `Tab` next panel.
 
 ## Light on the system
 
 While the popup is closed the widget starts **no process**: it re-reads `/proc/meminfo` and the
-pressure file in place every 3 seconds. `oomctl` runs once at start. While the popup is open,
+pressure file in place every 3 seconds, and the popup itself is not built until it first opens. `oomctl` runs once at start. While the popup is open,
 `apps.py` reads `/proc` every 3 seconds (a few tens of milliseconds), and an opened app is looked
 into every 9 seconds.
 

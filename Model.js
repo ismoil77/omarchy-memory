@@ -16,9 +16,6 @@ function tr(cfg, key, params) {
   return I18n.t(Strings.tables, cfg.lang, key, params)
 }
 
-function count(cfg, key, n) {
-  return I18n.count(Strings.tables, cfg.lang, key, n)
-}
 
 // "3.0 GB" / "512 MB" in the chosen language.
 function formatKb(cfg, kb) {
@@ -231,17 +228,7 @@ function parseApps(raw) {
   return out
 }
 
-function sumRss(list) {
-  var s = 0
-  for (var i = 0; i < (list || []).length; i++) s += Number(list[i].rssKb) || 0
-  return s
-}
 
-// Share of total RAM as "13%".
-function share(kb, totalKb) {
-  var t = Number(totalKb) || 0
-  return t > 0 ? Math.round((Number(kb) || 0) / t * 100) + "%" : ""
-}
 
 // How fast an app's memory grows, kB per minute, from the oldest snapshot
 // ({ at: ms, rss: { name: kB } }) at least 45 s old; 0 when unknown.
@@ -359,4 +346,12 @@ function keepOrder(prev, next) {
   }
   for (var k = 0; k < next.length; k++) if (byName[next[k].name]) out.push(next[k])
   return out
+}
+
+// + / - walk the presets from wherever the count is: 12 -> 15 or 10.
+function stepPreset(options, current, delta) {
+  var sorted = options.slice().sort(function(a, b) { return a - b })
+  var next = delta > 0 ? sorted.filter(function(n) { return n > current })[0]
+                       : sorted.filter(function(n) { return n < current }).pop()
+  return next === undefined ? current : next
 }

@@ -164,3 +164,10 @@ test("stop states and breakdown lines", () => {
   const b = M.parseBreakdown("719000\t3\tgeounit\t11 12 13\n5\t1\tjunk\tnope\n")
   assert.deepEqual(plain(b), [{ rssKb: 719000, count: 3, name: "geounit", pids: ["11", "12", "13"] }])
 })
+
+test("+ / - walk the presets from any count", () => {
+  assert.equal(M.stepPreset([5, 10, 15], 12, 1), 15)
+  assert.equal(M.stepPreset([5, 10, 15], 12, -1), 10)
+  assert.equal(M.stepPreset([5, 10, 15], 15, 1), 15)
+  assert.equal(M.stepPreset([5, 10, 15], 5, -1), 5)
+})

@@ -115,3 +115,20 @@ test("the script never signals itself", () => {
   assert.equal(r.stdout, "memtest-sh\t0\t0\t\n")
   fs.rmSync(dir, { recursive: true })
 })
+
+test("with PIDs, only those of the row's processes are signalled, and a foreign PID never", async () => {
+  const { dir, bin } = fixture("memtest-pids")
+  const other = fixture("memtest-other")
+  const kids = [spawn(bin, ["60"]), spawn(bin, ["60"])]
+  const stranger = spawn(other.bin, ["60"])
+  await wait(200)
+  // The stranger's PID is in the list (a reused PID): it is not one of the row's processes.
+  const [name, ok] = run("memtest-pids", "TERM", String(kids[0].pid), String(stranger.pid))
+  assert.deepEqual([name, ok], ["memtest-pids", "1"])
+  await wait(200)
+  assert.equal(kids[0].signalCode, "SIGTERM")
+  assert.equal(kids[1].signalCode, null)
+  assert.equal(stranger.signalCode, null)
+  kids[1].kill(); stranger.kill()
+  fs.rmSync(dir, { recursive: true }); fs.rmSync(other.dir, { recursive: true })
+})

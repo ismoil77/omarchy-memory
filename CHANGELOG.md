@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.1.0 — family look and audit
+
+- The family look (kit 2): one header, sections, buttons and signature across ismoil widgets.
+- The popup is built the first time it opens, not at shell start on every monitor; the list of
+  installed apps (names, icons) is built with it and each row is matched once, not at every reading.
+- One warning for the whole desktop (two monitors used to send two), at most every 10 minutes; extra
+  readings (opening, a key, IPC) no longer count toward it or add points to the 10-minute chart.
+- Stopping an inner line goes through `kill-group.sh`, which looks the app's processes up again:
+  a PID reused since the list was read is never signalled.
+- An opened app that exits closes its row (the list was frozen and `breakdown.sh` kept running).
+- `+` / `-` walk the presets from any count (12 → 15 / 10). `breakdown.sh` prints with `printf`.
+- Removed unused texts and helpers.
+
 ## 2.0.0 — calm or danger, the way oomd sees it
 
 - New look (kit 1.2): verdict chip, a 10-minute chart, what RAM is made of, tiles for pressure,
