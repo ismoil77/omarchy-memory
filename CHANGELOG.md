@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.0.0 — calm or danger, the way oomd sees it
+
+- New look (kit 1.2): verdict chip, a 10-minute chart, what RAM is made of, tiles for pressure,
+  swap, zram and cache, apps in a card with their icons.
+- The verdict follows systemd-oomd: pressure and swap against its kill lines from `oomctl`, not
+  "% used". `cautionPercent` / `warnPercent` are gone.
+- zram ratio, swap traffic per second, memory each app keeps in swap, "↑ growing".
+- **Free it now**: drops cached files through your app.slice's `memory.reclaim` (`swappiness=0`, no root).
+- Open an app to see what is inside it (tabs, extensions, scripts per project) and stop one line.
+- Rows keep their places under the pointer.
+- A notification when memory nears oomd's line (`notify`).
+- English and Russian (`language`), `textSize`, `animations`.
+- Lighter: no process while the popup is closed (kernel files re-read in place); `apps.py` replaces
+  a five-process `ps` pipeline and runs every 3 s instead of 1.5 s, only while open.
+
 ## 1.3.1 — safer Stop
 
 - `kill-group.sh`: an empty name or a signal other than TERM/KILL signals nothing and exits 2; the

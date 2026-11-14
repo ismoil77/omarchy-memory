@@ -1,0 +1,178 @@
+.pragma library
+
+// Every user-visible word of the widget, per language. {name} placeholders
+// are filled by I18n.t; an array is the forms of a noun (see I18n.plural).
+// Tests keep the two tables in step.
+
+var en = {
+  title: "Memory",
+  reading: "Reading…",
+  usedOf: "{used} used of {total}",
+  calm: "calm",
+  tight: "tight",
+  danger: "danger",
+  whyPressure: "programs wait for memory",
+  whySwap: "swap is nearly full",
+  whyRam: "almost no free memory",
+
+  chartAgo: "10 min ago",
+  chartNow: "now",
+  chartMemory: "memory",
+  chartPressure: "pressure",
+
+  partPrograms: "programs",
+  partCache: "cache",
+  partZram: "zram",
+  partFree: "free",
+
+  tilePressure: "Pressure",
+  tilePressureKill: "oomd stops apps at {limit} for {sec} s",
+  tilePressureNoOomd: "share of time programs wait",
+  tileSwap: "Swap",
+  tileSwapKill: "{used} of {total} · oomd line {limit}",
+  tileSwapPlain: "{used} of {total}",
+  tileSwapRate: "{in} in · {out} out per s",
+  tileZram: "zram",
+  tileZramDetail: "{orig} squeezed into {used}",
+  tileCache: "Cache",
+  tileCacheDetail: "files kept in RAM, given back when needed",
+  freeCache: "Free it now",
+  freeCacheTip: "Asks the kernel to drop cached files (no swapping, no root)",
+  freeing: "Freeing…",
+  freed: "Gave back {n}",
+  freedNone: "Nothing more to give back",
+  noSwap: "no swap",
+
+  sectionApps: "Apps",
+  showTop: "Show top {n}",
+  collecting: "Collecting…",
+  growing: "↑ growing",
+  inSwap: "+{n} in swap",
+  processes: ["process", "processes"],
+  lookingInside: "Looking inside…",
+  listed: "Listed {n}",
+  listedValue: "{size} · {share} of RAM",
+
+  stop: "Stop",
+  stopN: "Stop {n}",
+  cancel: "Cancel",
+  force: "Force",
+  stopTip: "Stop {name}",
+  stopAllTip: "SIGTERM to every {name} process",
+  stopPidsTip: "SIGTERM to PID {pids}",
+  forceTip: "SIGKILL: cannot be ignored, unsaved data is lost",
+  stopping: "Stopping…",
+  stillRunning: "Still running",
+  unableToStop: "Unable to stop",
+  notRunning: "Not running",
+  notAllowed: "Not allowed · {owner}",
+  partial: "Stopped {n} · {denied} not allowed, {owner}",
+  ownerOther: "another user",
+  ownerSystem: "system ({owners})",
+
+  openBtop: "Open btop",
+  barMode: "Bar: {mode}",
+  modeFree: "Free",
+  modeUsed: "Used",
+  modePercent: "Percent",
+  modeIcon: "Icon only",
+
+  tipBar: "RAM {used} / {total} ({pct}) · {free} free",
+  tipSwap: " · swap {used} / {total}",
+  tipState: " · {state}",
+
+  notifyTitle: "Memory is running out",
+  notifyBody: "{why}. oomd may stop an app soon: close something you do not need.",
+
+  unitGB: "GB",
+  unitMB: "MB",
+  unitKB: "kB"
+}
+
+var ru = {
+  title: "Память",
+  reading: "Читаю…",
+  usedOf: "занято {used} из {total}",
+  calm: "спокойно",
+  tight: "тесно",
+  danger: "опасно",
+  whyPressure: "программы ждут память",
+  whySwap: "swap почти полон",
+  whyRam: "свободной памяти почти нет",
+
+  chartAgo: "10 мин назад",
+  chartNow: "сейчас",
+  chartMemory: "память",
+  chartPressure: "давление",
+
+  partPrograms: "программы",
+  partCache: "кэш",
+  partZram: "zram",
+  partFree: "свободно",
+
+  tilePressure: "Давление",
+  tilePressureKill: "oomd остановит при {limit} за {sec} с",
+  tilePressureNoOomd: "доля времени, когда программы ждут",
+  tileSwap: "Swap",
+  tileSwapKill: "{used} из {total} · черта oomd {limit}",
+  tileSwapPlain: "{used} из {total}",
+  tileSwapRate: "{in} внутрь · {out} наружу в с",
+  tileZram: "zram",
+  tileZramDetail: "{orig} сжато в {used}",
+  tileCache: "Кэш",
+  tileCacheDetail: "файлы в памяти, отдаются по первому требованию",
+  freeCache: "Освободить",
+  freeCacheTip: "Просит ядро выбросить кэш файлов (без swap и без root)",
+  freeing: "Освобождаю…",
+  freed: "Отдано {n}",
+  freedNone: "Больше отдавать нечего",
+  noSwap: "swap нет",
+
+  sectionApps: "Приложения",
+  showTop: "Показать {n}",
+  collecting: "Собираю…",
+  growing: "↑ растёт",
+  inSwap: "+{n} в swap",
+  processes: ["процесс", "процесса", "процессов"],
+  lookingInside: "Смотрю внутрь…",
+  listed: "В списке {n}",
+  listedValue: "{size} · {share} памяти",
+
+  stop: "Стоп",
+  stopN: "Стоп {n}",
+  cancel: "Отмена",
+  force: "Убить",
+  stopTip: "Остановить {name}",
+  stopAllTip: "SIGTERM всем процессам {name}",
+  stopPidsTip: "SIGTERM процессам {pids}",
+  forceTip: "SIGKILL: нельзя проигнорировать, несохранённое пропадёт",
+  stopping: "Останавливаю…",
+  stillRunning: "Ещё работает",
+  unableToStop: "Не удалось остановить",
+  notRunning: "Уже не запущено",
+  notAllowed: "Нет прав · {owner}",
+  partial: "Остановлено {n} · {denied} без прав, {owner}",
+  ownerOther: "другой пользователь",
+  ownerSystem: "система ({owners})",
+
+  openBtop: "Открыть btop",
+  barMode: "Бар: {mode}",
+  modeFree: "Свободно",
+  modeUsed: "Занято",
+  modePercent: "Проценты",
+  modeIcon: "Только иконка",
+
+  tipBar: "Память {used} / {total} ({pct}) · свободно {free}",
+  tipSwap: " · swap {used} / {total}",
+  tipState: " · {state}",
+
+  notifyTitle: "Память заканчивается",
+  notifyBody: "{why}. Скоро oomd может закрыть приложение: закрой что-нибудь лишнее.",
+
+  unitGB: "ГБ",
+  unitMB: "МБ",
+  unitKB: "кБ"
+}
+
+var langs = ["en", "ru"]
+var tables = { en: en, ru: ru }

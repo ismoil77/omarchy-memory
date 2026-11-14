@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "ismoil.memory",
   "name": "Memory",
-  "version": "1.3.1",
+  "version": "2.0.0",
   "author": "ismoil",
   "license": "MIT",
-  "description": "RAM in the bar with a popup: usage bar, swap, the programs holding the most memory (stop one in two clicks), and colours that follow your theme — accent, then yellow, then red as memory fills up.",
+  "description": "RAM in the bar, and a popup that tells calm from danger the way systemd-oomd does: the last 10 minutes, what RAM is made of, pressure and swap against oomd's kill lines, zram, the cache with a button to give it back, and the apps holding the most memory with their swap — open one to see its tabs or scripts, stop it in two clicks. Reads kernel files in place: no background processes. English and Russian, readable for low vision.",
   "kinds": [
     "bar-widget"
   ],
@@ -14,42 +14,80 @@
   },
   "barWidget": {
     "displayName": "Memory",
-    "description": "RAM free/used indicator; popup with swap and top processes; theme-coloured warning levels",
+    "description": "RAM, pressure, swap and zram; apps you can open and stop",
     "category": "System",
     "allowMultiple": false,
     "defaultSection": "right",
     "defaults": {
       "display": "free",
-      "warnPercent": 90,
       "interval": 3,
       "topProcesses": 10,
-      "cautionPercent": 75
+      "notify": true,
+      "language": "auto",
+      "textSize": "Normal",
+      "animations": true
     },
     "schema": [
       {
         "key": "display",
-        "type": "string",
-        "label": "Bar label: free | used | percent | icon"
+        "type": "enum",
+        "label": "Bar label",
+        "options": [
+          "free",
+          "used",
+          "percent",
+          "icon"
+        ],
+        "defaultValue": "free",
+        "description": "Right click on the bar cycles it too."
       },
       {
-        "key": "cautionPercent",
-        "type": "number",
-        "label": "Turn yellow when used % reaches"
+        "key": "notify",
+        "type": "boolean",
+        "label": "Warn when memory runs out",
+        "description": "One notification when pressure or swap nears systemd-oomd's kill line, at most every 10 minutes."
       },
       {
-        "key": "warnPercent",
-        "type": "number",
-        "label": "Highlight when used % reaches"
+        "key": "language",
+        "type": "enum",
+        "label": "Language",
+        "options": [
+          "auto",
+          "en",
+          "ru"
+        ],
+        "defaultValue": "auto",
+        "description": "auto follows the system locale (Russian or English)."
       },
       {
-        "key": "interval",
-        "type": "number",
-        "label": "Refresh interval (seconds)"
+        "key": "textSize",
+        "type": "enum",
+        "label": "Text size",
+        "options": [
+          "Normal",
+          "Large",
+          "Extra large"
+        ],
+        "defaultValue": "Normal",
+        "description": "Scales the popup text. Text is never smaller than 13 px."
+      },
+      {
+        "key": "animations",
+        "type": "boolean",
+        "label": "Animations",
+        "description": "Turn off to stop bars from sliding."
       },
       {
         "key": "topProcesses",
         "type": "number",
-        "label": "Processes listed (1–20; the popup offers 5, 10, 15)"
+        "label": "Apps listed (1–20)",
+        "description": "The popup offers 5, 10 and 15."
+      },
+      {
+        "key": "interval",
+        "type": "number",
+        "label": "Refresh interval (seconds, at least 2)",
+        "description": "How often the kernel's memory files are re-read. No process is started for it."
       }
     ]
   }

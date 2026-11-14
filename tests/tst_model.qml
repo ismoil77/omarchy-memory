@@ -8,29 +8,21 @@ import "../kit/Contrast.js" as Contrast
 TestCase {
   name: "Model in the QML engine"
 
-  function test_summary_and_levels() {
-    var mem = Model.summarize(Model.parseMeminfo("MemTotal\t1000\nMemAvailable\t120\n"))
+  function test_reading_and_verdict() {
+    var ru = Model.config({ language: "ru" })
+    var mem = Model.summarize(Model.parseMeminfo("MemTotal:  1000 kB\nMemAvailable:  100 kB\nMemFree: 100 kB\n"), null)
     compare(mem.ready, true)
-    compare(Model.percent(mem.usedFraction), 88)
-    compare(Model.level(mem.usedFraction, 75, 90), "yellow")
-    compare(Model.level(0.91, 75, 90), "red")
-    compare(Model.level(0.2, 75, 90), "ok")
-    compare(Model.barLabel("percent", mem), "88%")
-  }
-
-  function test_processes_and_kill() {
-    var list = Model.parseProcesses("2048\t3\tnode\n1024\t1\tchrome\n")
-    compare(list.length, 2)
-    compare(Model.formatKb(Model.sumRss(list)), "3 MB")
-    compare(Model.parseKillResult("node\t2\t1\troot").owners, "root")
-    compare(Model.killStatus({ phase: "denied", owners: "root" }), "Not allowed · system (root)")
-    compare(Model.killStatus({ phase: "failed" }), "Unable to stop")
+    compare(Model.barLabel("percent", mem), "90%")
+    compare(Model.verdict(mem, { full: 0 }, null).level, "tight")
+    compare(Model.formatKb(ru, 3 * 1024 * 1024), "3,0 ГБ")
+    compare(Model.parseOomctl("Swap Used Limit: 90.00%\nDefault Memory Pressure Limit: 50.00%\n").swapLimit, 0.9)
+    compare(Model.matchApp("chrome", [{ id: "google-chrome", name: "Google Chrome", exec: "/usr/bin/google-chrome-stable" }]).name, "Google Chrome")
+    compare(Model.keepOrder([{ name: "b" }, { name: "a" }], [{ name: "a" }, { name: "b" }])[0].name, "b")
+    compare(Model.killStatus(ru, { phase: "failed" }), "Не удалось остановить")
   }
 
   function test_yellow_stays_readable_on_a_cream_popup() {
     var c = Contrast.ensure("#D0A215", "#FFFCF0", 4.5)
     verify(Contrast.ratio(c, "#FFFCF0") >= 4.5)
-    var r = Contrast.ensure("#D14D41", "#FFFCF0", 4.5)
-    verify(Contrast.ratio(r, "#FFFCF0") >= 4.5)
   }
 }

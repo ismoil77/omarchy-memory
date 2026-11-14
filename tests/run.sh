@@ -3,7 +3,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-echo "== node: Model.js, kit/Contrast.js, kill-group.sh"
+echo "== python: apps.py"
+python3 -I -m unittest discover -s tests -p "test_*.py"
+
+echo "== node: Model.js, Strings.js, kit/Contrast.js, kill-group.sh, breakdown.sh"
 node --test tests/*.test.mjs
 
 # The Qt 6 runner: qmltestrunner6 (Debian/Ubuntu) or qt6/bin (Arch, where plain qmltestrunner is Qt 5).
