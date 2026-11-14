@@ -517,6 +517,7 @@ Panel {
           Kit.AreaChart {
             width: parent.width
             look: skin
+            live: root.opened
             capacity: root.historySize
             leftLabel: root.tr("chartAgo")
             rightLabel: root.tr("chartNow")
