@@ -15,6 +15,7 @@ var en = {
   whySwap: "swap is nearly full",
   whyRam: "almost no free memory",
 
+  chartCaption: "Last 10 minutes",
   chartAgo: "10 min ago",
   chartNow: "now",
   chartMemory: "memory",
@@ -36,7 +37,7 @@ var en = {
   tileZramDetail: "{orig} → {used}",
   tileCache: "Cache",
   tileCacheDetail: "given back on demand",
-  freeCache: "Free it now",
+  freeCache: "Free cache",
   freeCacheTip: "Asks the kernel to drop cached files (no swapping, no root)",
   freeing: "Freeing…",
   freed: "Gave back {n}",
@@ -100,6 +101,7 @@ var ru = {
   whySwap: "swap почти полон",
   whyRam: "свободной памяти почти нет",
 
+  chartCaption: "Последние 10 минут",
   chartAgo: "10 мин назад",
   chartNow: "сейчас",
   chartMemory: "память",
@@ -121,7 +123,7 @@ var ru = {
   tileZramDetail: "{orig} → {used}",
   tileCache: "Кэш",
   tileCacheDetail: "отдаётся по требованию",
-  freeCache: "Освободить",
+  freeCache: "Освободить кэш",
   freeCacheTip: "Просит ядро выбросить кэш файлов (без swap и без root)",
   freeing: "Освобождаю…",
   freed: "Отдано {n}",

@@ -42,6 +42,10 @@ Panel {
   readonly property string icon: "󰍛"
 
   function tr(key, params) { return Model.tr(cfg, key, params) }
+
+  // The version for the signature, from the manifest so it never drifts.
+  FileView { id: manifestFile; path: root.localPath(Qt.resolvedUrl("manifest.json")); blockLoading: true }
+  readonly property string version: { try { return JSON.parse(manifestFile.text()).version || "" } catch (e) { return "" } }
   function kb(n) { return Model.formatKb(cfg, n) }
   // file:///a%20b/x.sh -> /a b/x.sh
   function localPath(url) { return decodeURIComponent(String(url).replace(/^file:\/\//, "")) }
@@ -488,76 +492,28 @@ Panel {
           width: scroller.width
           spacing: Style.space(12)
 
-          // ---------- Hero: icon · percent and what is used · verdict ----------
-          Item {
+          Kit.Header {
             width: parent.width
-            implicitHeight: Math.max(heroIcon.height, heroText.implicitHeight, chip.implicitHeight)
-
-            Rectangle {
-              id: heroIcon
-              width: Math.round(skin.hero * 1.7)
-              height: width
-              radius: skin.radius
-              color: Util.alpha(skin.levelFill(root.kitLevel), 0.16)
-              anchors.left: parent.left
-              anchors.verticalCenter: parent.verticalCenter
-
-              Behavior on color { ColorAnimation { duration: skin.fade } }
-
-              Text {
-                anchors.centerIn: parent
-                textFormat: Text.PlainText
-                text: root.icon
-                color: skin.levelText(root.kitLevel)
-                font.family: skin.fontFamily
-                font.pixelSize: skin.hero
-              }
-            }
-
-            Column {
-              id: heroText
-              anchors.left: heroIcon.right
-              anchors.leftMargin: Style.space(12)
-              anchors.right: chip.left
-              anchors.rightMargin: Style.space(8)
-              anchors.verticalCenter: parent.verticalCenter
-              spacing: Style.space(2)
-
-              Text {
-                textFormat: Text.PlainText
-                text: root.mem.ready ? Model.percent(root.mem.usedFraction) : "—"
-                color: skin.ink
-                font.family: skin.fontFamily
-                font.pixelSize: skin.heroLarge
-                font.bold: true
-                font.features: { "tnum": 1 }
-              }
-
-              Text {
-                width: parent.width
-                textFormat: Text.PlainText
-                text: !root.mem.ready ? root.tr("reading")
-                    : root.mood.why !== "" ? root.tr(root.mood.why)
-                    : root.tr("usedOf", { used: root.kb(root.mem.usedKb), total: root.kb(root.mem.totalKb) })
-                color: root.mood.level === "calm" ? skin.dim : skin.levelText(root.kitLevel)
-                font.family: skin.fontFamily
-                font.pixelSize: skin.small
-                wrapMode: Text.WordWrap
-              }
-            }
-
-            Kit.Chip {
-              id: chip
-              look: skin
-              text: root.mem.ready ? root.tr(root.mood.level) : ""
-              tone: skin.levelFill(root.kitLevel)
-              toneText: skin.levelText(root.kitLevel)
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-            }
+            look: skin
+            glyph: root.icon
+            name: root.tr("title")
+            value: root.mem.ready ? Model.percent(root.mem.usedFraction) : "—"
+            say: !root.mem.ready ? root.tr("reading")
+               : root.mood.why !== "" ? root.tr(root.mood.why)
+               : root.tr("usedOf", { used: root.kb(root.mem.usedKb), total: root.kb(root.mem.totalKb) })
+            sayColor: root.mood.level === "calm" ? skin.dim : skin.levelText(root.kitLevel)
+            chip: root.mem.ready ? root.tr(root.mood.level) : ""
+            tone: skin.levelFill(root.kitLevel)
+            toneText: skin.levelText(root.kitLevel)
           }
 
-          // ---------- Last 10 minutes ----------
+          // ---------- Last 10 minutes, and what RAM is made of now ----------
+          Kit.Section {
+            width: parent.width
+            look: skin
+            caption: root.tr("chartCaption")
+            spacing: Style.space(10)
+
           Kit.AreaChart {
             width: parent.width
             look: skin
@@ -580,6 +536,7 @@ Panel {
               { value: root.mem.zramKb, color: skin.hue("magenta"), label: root.tr("partZram"), text: Model.shortKb(root.mem.zramKb) },
               { value: root.mem.freeKb, color: skin.track, label: root.tr("partFree"), text: Model.shortKb(root.mem.freeKb) }
             ].filter(function(s) { return s.value > 0 })
+          }
           }
 
           // ---------- Pressure · swap · zram · cache ----------
@@ -631,61 +588,31 @@ Panel {
               detail: root.freeState === "freeing" ? root.tr("freeing")
                     : root.freeState === "done" ? (root.freedKb >= 1024 ? root.tr("freed", { n: root.kb(root.freedKb) }) : root.tr("freedNone"))
                     : root.tr("tileCacheDetail")
-              action: root.appSlice && root.freeState === "" ? root.tr("freeCache") : ""
-              onActivated: root.freeCache()
             }
           }
 
           // ---------- Apps ----------
-          Kit.Card {
+          Kit.Section {
             id: appsCard
             width: parent.width
             look: skin
+            caption: root.tr("sectionApps")
             spacing: Style.space(2)
-
-            HoverHandler { id: appsHover }
-
-            Item {
-              width: parent.width
-              implicitHeight: Math.max(appsHeader.implicitHeight, countPicker.implicitHeight) + Style.space(4)
-
-              Text {
-                id: appsHeader
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                textFormat: Text.PlainText
-                text: root.tr("sectionApps").toUpperCase()
-                color: skin.dim
-                font.family: skin.fontFamily
-                font.pixelSize: skin.small
-                font.letterSpacing: 0.8
-              }
-
-              Row {
-                id: countPicker
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: Style.space(4)
-
-                Repeater {
-                  model: root.countOptions
-
-                  delegate: Button {
-                    required property var modelData
-                    text: String(modelData)
-                    tooltipText: root.tr("showTop", { n: modelData })
-                    selected: root.topCount === modelData
-                    bordered: true
-                    foreground: skin.ink
-                    fontFamily: skin.fontFamily
-                    fontSize: skin.small
-                    horizontalPadding: Style.space(7)
-                    verticalPadding: Style.space(1)
-                    onClicked: root.setTopCount(modelData)
-                  }
+            trailing: [
+              Repeater {
+                model: root.countOptions
+                delegate: Kit.ActionButton {
+                  required property var modelData
+                  look: skin
+                  compact: true
+                  text: String(modelData)
+                  selected: root.topCount === modelData
+                  onClicked: root.setTopCount(modelData)
                 }
               }
-            }
+            ]
+
+            HoverHandler { id: appsHover }
 
             Text {
               visible: root.apps.length === 0
@@ -817,44 +744,33 @@ Panel {
                         font.features: { "tnum": 1 }
                       }
 
-                      Button {
+                      Kit.ActionButton {
+                        look: skin
+                        compact: true
+                        danger: true
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
                         visible: appHover.hovered
                         iconText: "󰅖"
-                        iconSize: skin.body
                         text: root.tr("stop")
-                        tooltipText: root.tr("stopTip", { name: appRow.title }) + (appRow.modelData.count > 1 ? " · " + Model.count(root.cfg, "processes", appRow.modelData.count) : "")
-                        foreground: skin.badText
-                        fontFamily: skin.fontFamily
-                        fontSize: skin.small
-                        horizontalPadding: Style.space(4)
-                        verticalPadding: 0
                         onClicked: root.armKill(appRow.modelData.name)
                       }
                     }
 
-                    Button {
+                    Kit.ActionButton {
+                      look: skin
+                      compact: true
                       visible: appItem.confirming
                       text: root.tr("cancel")
-                      fontSize: skin.small
-                      foreground: skin.ink
-                      fontFamily: skin.fontFamily
-                      horizontalPadding: Style.space(6)
-                      verticalPadding: Style.space(1)
                       onClicked: root.cancelKill(appRow.modelData.name)
                     }
 
-                    Button {
+                    Kit.ActionButton {
+                      look: skin
+                      compact: true
+                      danger: true
                       visible: appItem.confirming
                       text: appRow.modelData.count > 1 ? root.tr("stopN", { n: appRow.modelData.count }) : root.tr("stop")
-                      tooltipText: root.tr("stopAllTip", { name: appRow.modelData.name })
-                      fontSize: skin.small
-                      foreground: skin.badText
-                      fontFamily: skin.fontFamily
-                      bordered: true
-                      horizontalPadding: Style.space(6)
-                      verticalPadding: Style.space(1)
                       onClicked: root.sendSignal(appRow.modelData.name, "TERM")
                     }
 
@@ -868,16 +784,12 @@ Panel {
                       anchors.verticalCenter: parent.verticalCenter
                     }
 
-                    Button {
+                    Kit.ActionButton {
+                      look: skin
+                      compact: true
+                      danger: true
                       visible: appItem.killPhase === "stuck"
                       text: root.tr("force")
-                      tooltipText: root.tr("forceTip")
-                      fontSize: skin.small
-                      foreground: skin.badText
-                      fontFamily: skin.fontFamily
-                      bordered: true
-                      horizontalPadding: Style.space(6)
-                      verticalPadding: Style.space(1)
                       onClicked: root.sendSignal(appRow.modelData.name, "KILL")
                     }
                   }
@@ -955,41 +867,30 @@ Panel {
                         font.features: { "tnum": 1 }
                       }
 
-                      Button {
+                      Kit.ActionButton {
+                        look: skin
+                        compact: true
+                        danger: true
                         visible: subHover.hovered && !subItem.armed
                         iconText: "󰅖"
-                        iconSize: skin.small
                         text: root.tr("stop")
-                        tooltipText: root.tr("stopTip", { name: subItem.modelData.name })
-                        foreground: skin.badText
-                        fontFamily: skin.fontFamily
-                        fontSize: skin.small
-                        horizontalPadding: Style.space(4)
-                        verticalPadding: 0
                         onClicked: root.subArmed = subItem.modelData.name
                       }
 
-                      Button {
+                      Kit.ActionButton {
+                        look: skin
+                        compact: true
                         visible: subItem.armed
                         text: root.tr("cancel")
-                        fontSize: skin.small
-                        foreground: skin.ink
-                        fontFamily: skin.fontFamily
-                        horizontalPadding: Style.space(6)
-                        verticalPadding: 0
                         onClicked: root.subArmed = ""
                       }
 
-                      Button {
+                      Kit.ActionButton {
+                        look: skin
+                        compact: true
+                        danger: true
                         visible: subItem.armed
                         text: subItem.modelData.pids.length > 1 ? root.tr("stopN", { n: subItem.modelData.pids.length }) : root.tr("stop")
-                        tooltipText: root.tr("stopPidsTip", { pids: subItem.modelData.pids.join(", ") })
-                        fontSize: skin.small
-                        foreground: skin.badText
-                        fontFamily: skin.fontFamily
-                        bordered: true
-                        horizontalPadding: Style.space(6)
-                        verticalPadding: 0
                         onClicked: root.stopPids(subItem.modelData.pids)
                       }
                     }
@@ -1000,41 +901,38 @@ Panel {
           }
 
           // ---------- Actions ----------
-          Row {
-            id: actionRow
+          Kit.ActionRow {
             width: parent.width
-            spacing: Style.space(6)
 
-            readonly property real cellWidth: (width - spacing) / 2
-            readonly property real buttonHeight: Math.max(btopButton.implicitHeight, modeButton.implicitHeight)
-
-            Button {
-              id: btopButton
-              width: actionRow.cellWidth
-              height: actionRow.buttonHeight
+            Kit.ActionButton {
+              visible: root.appSlice !== ""
+              enabled: root.freeState === ""
+              look: skin
+              iconText: "󰃢"
+              text: root.freeState === "freeing" ? root.tr("freeing") : root.tr("freeCache")
+              primary: true
+              onClicked: root.freeCache()
+            }
+            Kit.ActionButton {
+              look: skin
               iconText: "󰆍"
-              iconSize: skin.strong
-              text: root.tr("openBtop")
-              fontSize: skin.small
-              foreground: skin.ink
-              fontFamily: skin.fontFamily
-              bordered: true
+              text: "btop"
               onClicked: root.openMonitor()
             }
-
-            Button {
-              id: modeButton
-              width: actionRow.cellWidth
-              height: actionRow.buttonHeight
+            Kit.ActionButton {
+              look: skin
               iconText: "󰈈"
-              iconSize: skin.strong
-              text: root.tr("barMode", { mode: Model.modeLabel(root.cfg, root.display) })
-              fontSize: skin.small
-              foreground: skin.ink
-              fontFamily: skin.fontFamily
-              bordered: true
+              text: Model.modeLabel(root.cfg, root.display)
               onClicked: root.cycleDisplay()
             }
+          }
+
+          Kit.Signature {
+            width: parent.width
+            look: skin
+            widget: "memory"
+            extra: root.oom ? "systemd-oomd" : ""
+            version: root.version
           }
         }
       }
