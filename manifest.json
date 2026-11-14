@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "ismoil.memory",
   "name": "Memory",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "author": "ismoil",
   "license": "MIT",
-  "description": "RAM in the bar, and a popup that tells calm from danger the way systemd-oomd does: the last 10 minutes, what RAM is made of, pressure and swap against oomd's kill lines, zram, the cache with a button to give it back, and the apps holding the most memory with their swap — open one to see its tabs or scripts, stop it in two clicks. Reads kernel files in place: no background processes. English and Russian, readable for low vision.",
+  "description": "RAM at a glance: calm, tight or danger, judged the way systemd-oomd does. Pressure, swap, zram and cache, a 10-minute chart, and the apps eating memory: open one to see its tabs or scripts, stop it in two clicks. No background processes. English and Russian.",
   "kinds": [
     "bar-widget"
   ],
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "Memory",
-    "description": "RAM, pressure, swap and zram; apps you can open and stop",
+    "description": "RAM: calm, tight or danger; apps you can open and stop",
     "category": "System",
     "allowMultiple": false,
     "defaultSection": "right",

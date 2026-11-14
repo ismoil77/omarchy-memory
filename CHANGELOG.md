@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.1
+
+- A landscape banner as the marketplace preview (the card crops a strip from the centre, a tall popup
+  screenshot showed only its blurred top); a shorter description that says what the widget is first;
+  the README shows the popup in both languages.
+
 ## 2.1.0 — family look and audit
 
 - The family look (kit 2): one header, sections, buttons and signature across ismoil widgets.

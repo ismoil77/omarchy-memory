@@ -6,7 +6,11 @@ RAM in the [Omarchy](https://omarchy.org) bar, and a popup that tells **calm** f
 way systemd-oomd does — not by "90% used", which is normal on Linux, but by programs waiting for
 memory and swap running out.
 
-![The popup](preview.png)
+![Memory](preview.png)
+
+| English | Русский |
+|---|---|
+| ![the popup](docs/preview-en.png) | ![окно](docs/preview-ru.png) |
 
 Bar: `󰍛 3.0G` — free memory by default. It turns the theme's yellow when memory is tight and red when
 oomd may soon stop an app. Left click opens the popup, right click cycles the label (free → used →
