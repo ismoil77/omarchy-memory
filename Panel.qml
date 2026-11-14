@@ -583,15 +583,10 @@ Panel {
           }
 
           // ---------- Pressure · swap · zram · cache ----------
-          Grid {
-            id: tiles
+          Kit.TileRow {
             width: parent.width
-            columns: 2
-            spacing: Style.space(8)
-            readonly property real cell: (width - spacing) / 2
 
             Kit.Tile {
-              width: tiles.cell
               look: skin
               caption: root.tr("tilePressure")
               value: root.pressure ? Model.pressureText(root.pressure.full) : "—"
@@ -603,7 +598,6 @@ Panel {
             }
 
             Kit.Tile {
-              width: tiles.cell
               look: skin
               caption: root.tr("tileSwap")
               value: root.mem.swapTotalKb > 0 ? Model.percent(root.mem.swapFraction) : root.tr("noSwap")
@@ -617,9 +611,13 @@ Panel {
                          ? "\n" + root.tr("tileSwapRate", { in: root.kb(root.rate.inKb), out: root.kb(root.rate.outKb) }) : "")
             }
 
+          }
+
+          Kit.TileRow {
+            width: parent.width
+
             Kit.Tile {
               visible: root.zram !== null && root.zram.origKb > 0
-              width: tiles.cell
               look: skin
               caption: root.tr("tileZram")
               value: Model.ratioText(root.cfg, root.zram)
@@ -627,7 +625,6 @@ Panel {
             }
 
             Kit.Tile {
-              width: tiles.cell
               look: skin
               caption: root.tr("tileCache")
               value: root.kb(root.mem.cacheKb)
