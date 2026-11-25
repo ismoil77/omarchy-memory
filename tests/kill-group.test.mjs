@@ -6,8 +6,8 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-const script = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../kill-group.sh")
-const run = (...args) => spawnSync("sh", [script, ...args], { encoding: "utf8" }).stdout.replace(/\n$/, "").split("\t")
+const script = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../kill_group.py")
+const run = (...args) => spawnSync("python3", [script, ...args], { encoding: "utf8" }).stdout.replace(/\n$/, "").split("\t")
 const wait = (ms) => new Promise(r => setTimeout(r, ms))
 
 // A copy of `sleep` under a name nothing else uses, so the row is ours alone.
@@ -76,7 +76,7 @@ test("a refused kill is counted as denied with the owner named", (t) => {
 })
 
 test("an empty name signals nothing, prints nothing and fails", () => {
-  const r = spawnSync("sh", [script, "", "TERM"], { encoding: "utf8" })
+  const r = spawnSync("python3", [script, "", "TERM"], { encoding: "utf8" })
   assert.equal(r.status, 2)
   assert.equal(r.stdout, "")
 })
@@ -85,7 +85,7 @@ test("a signal other than TERM or KILL is refused, not reported as denied", asyn
   const { dir, bin } = fixture("memtest-sig")
   const kid = spawn(bin, ["60"])
   await wait(200)
-  const r = spawnSync("sh", [script, "memtest-sig", "BOGUS"], { encoding: "utf8" })
+  const r = spawnSync("python3", [script, "memtest-sig", "BOGUS"], { encoding: "utf8" })
   assert.equal(r.status, 2)
   assert.equal(r.stdout, "")
   assert.equal(kid.signalCode, null)
@@ -105,14 +105,13 @@ test("names with spaces, backslashes or regex characters match literally", async
 })
 
 test("the script never signals itself", () => {
-  // Run it through a copy of sh called memtest-sh and ask it to stop memtest-sh.
+  // Run it through a link to python3 called memtest-py and ask it to stop memtest-py.
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "memkill-"))
-  const copy = path.join(dir, "memtest-sh")
-  fs.copyFileSync(spawnSync("which", ["sh"], { encoding: "utf8" }).stdout.trim(), copy)
-  fs.chmodSync(copy, 0o755)
-  const r = spawnSync(copy, [script, "memtest-sh", "TERM"], { encoding: "utf8" })
+  const link = path.join(dir, "memtest-py")
+  fs.symlinkSync(spawnSync("which", ["python3"], { encoding: "utf8" }).stdout.trim(), link)
+  const r = spawnSync(link, [script, "memtest-py", "TERM"], { encoding: "utf8" })
   assert.equal(r.signal, null)
-  assert.equal(r.stdout, "memtest-sh\t0\t0\t\n")
+  assert.equal(r.stdout, "memtest-py\t0\t0\t\n")
   fs.rmSync(dir, { recursive: true })
 })
 

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ismoil.memory",
   "name": "Memory",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "author": "ismoil",
   "license": "MIT",
   "description": "RAM at a glance: calm, tight or danger, judged the way systemd-oomd does. Pressure, swap, zram and cache, a 10-minute chart, and the apps eating memory: open one to see its tabs or scripts, stop it in two clicks. No background processes. English and Russian.",

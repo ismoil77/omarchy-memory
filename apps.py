@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Memory held by each program, for the Memory widget's popup.
 
-Processes are grouped by the basename of argv[0], the same rule kill-group.sh
+Processes are grouped by the basename of argv[0], the same rule kill_group.py
 and breakdown.sh use, so "Stop" acts on exactly the processes of a row.
 Prints one JSON object, no human words:
 

@@ -269,7 +269,7 @@ function parseBreakdown(raw) {
 
 // ---------- stopping a row ----------
 
-// One line from kill-group.sh: "name\tsignalled\tdenied\towners".
+// One line from kill_group.py: "name\tsignalled\tdenied\towners".
 function parseKillResult(raw) {
   var line = String(raw || "").split("\n")[0]
   var parts = line.split("\t")

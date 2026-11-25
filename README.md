@@ -87,7 +87,7 @@ tests/run.sh
 
 Python tests for `apps.py` against a fake `/proc`; Node tests for `Model.js` (kernel files, the
 verdict, oomd lines, app icons, stable order, texts in both languages), `kit/Contrast.js` against
-every stock theme, `kill-group.sh` and `breakdown.sh` against real processes; the libraries in Qt's
+every stock theme, `kill_group.py` and `breakdown.sh` against real processes; the libraries in Qt's
 engine with `qmltestrunner`; then `omarchy plugin validate`.
 
 ## License

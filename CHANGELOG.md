@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.2
+
+- Stop and Force signal through a pidfd (`kill_group.py` replaces `kill-group.sh`): each process is
+  held first, its name is checked, and the signal goes to that very process. A PID that the kernel
+  reused between the lookup and the signal can no longer be hit. Needs Linux 5.3 and Python 3.9;
+  without them nothing is signalled.
+
 ## 2.1.1
 
 - A landscape banner as the marketplace preview (the card crops a strip from the centre, a tall popup

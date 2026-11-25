@@ -52,7 +52,7 @@ Panel {
   function localPath(url) { return decodeURIComponent(String(url).replace(/^file:\/\//, "")) }
 
   readonly property string appsScript: localPath(Qt.resolvedUrl("apps.py"))
-  readonly property string killScript: localPath(Qt.resolvedUrl("kill-group.sh"))
+  readonly property string killScript: localPath(Qt.resolvedUrl("kill_group.py"))
   readonly property string breakdownScript: localPath(Qt.resolvedUrl("breakdown.sh"))
 
   // The user's app.slice: its pressure is the number systemd-oomd watches.
@@ -288,7 +288,7 @@ Panel {
     if (killProc.running) return
     setKillState(name, { phase: "sending", signal: sig })
     killing = name
-    killProc.command = ["sh", killScript, name, sig]
+    killProc.command = ["python3", killScript, name, sig]
     killProc.running = true
   }
 
@@ -328,12 +328,12 @@ Panel {
     if (changed) killStates = next
   }
 
-  // The PIDs are up to 9 s old: kill-group.sh looks the app's processes up
+  // The PIDs are up to 9 s old: kill_group.py looks the app's processes up
   // again and signals only those of them that are in this list.
   function stopPids(pids) {
     subArmed = ""
     if (subKillProc.running || expanded === "") return
-    subKillProc.command = ["sh", killScript, expanded, "TERM"].concat(pids)
+    subKillProc.command = ["python3", killScript, expanded, "TERM"].concat(pids)
     subKillProc.running = true
   }
 

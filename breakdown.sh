@@ -3,7 +3,7 @@
 #
 #   breakdown.sh NAME
 #
-# Same matching rule as kill-group.sh (basename of argv[0]). Each process gets
+# Same matching rule as kill_group.py (basename of argv[0]). Each process gets
 # a label, and processes with the same label are summed:
 #   - Chromium/Electron helpers: their --type (renderer, gpu-process, ...),
 #     with extension and browser-UI renderers told apart from tabs;
