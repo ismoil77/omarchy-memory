@@ -14,10 +14,12 @@ test("groups a row's processes by script and project folder", async () => {
   const proj = path.join(dir, "projA")
   fs.mkdirSync(proj)
   const bin = path.join(dir, "memtest-break")
-  fs.copyFileSync(spawnSync("which", ["sleep"], { encoding: "utf8" }).stdout.trim(), bin)
-  fs.writeFileSync(path.join(proj, "60"), "") // a real file argument counts as the script
-  const kids = [spawn(bin, ["60"], { cwd: proj }), spawn(bin, ["60"], { cwd: proj }), spawn(bin, ["61"], { cwd: dir })]
-  await wait(200)
+  // A link to python3, not a copy of `sleep`: see kill-group.test.mjs.
+  fs.symlinkSync(spawnSync("which", ["python3"], { encoding: "utf8" }).stdout.trim(), bin)
+  const nap = "import time; time.sleep(60)"
+  fs.writeFileSync(path.join(proj, "60"), nap) // a real file argument counts as the script
+  const kids = [spawn(bin, ["60"], { cwd: proj }), spawn(bin, ["60"], { cwd: proj }), spawn(bin, ["-c", nap], { cwd: dir })]
+  await wait(400)
   const rows = spawnSync("sh", [script, "memtest-break"], { encoding: "utf8" }).stdout.trim().split("\n").map(l => l.split("\t"))
   kids.forEach(k => k.kill())
   fs.rmSync(dir, { recursive: true })

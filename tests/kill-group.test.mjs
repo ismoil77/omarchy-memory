@@ -10,33 +10,35 @@ const script = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../ki
 const run = (...args) => spawnSync("python3", [script, ...args], { encoding: "utf8" }).stdout.replace(/\n$/, "").split("\t")
 const wait = (ms) => new Promise(r => setTimeout(r, ms))
 
-// A copy of `sleep` under a name nothing else uses, so the row is ours alone.
+// A program under a name nothing else uses, so the row is ours alone: a link to
+// python3 (a copy of `sleep` is no good, on some systems it is one multi-call
+// binary that refuses to run under another name).
+const nap = ["-c", "import time; time.sleep(60)"]
 function fixture(name) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "memkill-"))
   const bin = path.join(dir, name)
-  fs.copyFileSync(spawnSync("which", ["sleep"], { encoding: "utf8" }).stdout.trim(), bin)
-  fs.chmodSync(bin, 0o755)
+  fs.symlinkSync(spawnSync("which", ["python3"], { encoding: "utf8" }).stdout.trim(), bin)
   return { dir, bin }
 }
 
 test("TERM stops every process in the row and reports the count", async () => {
   const { dir, bin } = fixture("memtest-term")
-  const kids = [spawn(bin, ["60"]), spawn(bin, ["60"])]
-  await wait(200)
+  const kids = [spawn(bin, nap), spawn(bin, nap)]
+  await wait(400)
   const [name, ok, denied, owners] = run("memtest-term", "TERM")
   assert.deepEqual([name, ok, denied, owners], ["memtest-term", "2", "0", ""])
-  await wait(200)
+  await wait(400)
   assert.ok(kids.every(k => k.signalCode === "SIGTERM"))
   fs.rmSync(dir, { recursive: true })
 })
 
 test("KILL ends a process that is stopped and cannot act on TERM", async () => {
   const { dir, bin } = fixture("memtest-kill")
-  const stubborn = spawn(bin, ["60"])
-  await wait(200)
+  const stubborn = spawn(bin, nap)
+  await wait(400)
   stubborn.kill("SIGSTOP")
   assert.equal(run("memtest-kill", "KILL")[1], "1")
-  await wait(200)
+  await wait(400)
   assert.equal(stubborn.signalCode, "SIGKILL")
   fs.rmSync(dir, { recursive: true })
 })
@@ -47,8 +49,8 @@ test("a name nobody runs signals nothing", () => {
 
 test("only the exact basename matches, not a prefix or a substring", async () => {
   const { dir, bin } = fixture("memtest-exact")
-  const kid = spawn(bin, ["60"])
-  await wait(200)
+  const kid = spawn(bin, nap)
+  await wait(400)
   assert.equal(run("memtest", "TERM")[1], "0")
   assert.equal(run("exact", "TERM")[1], "0")
   assert.equal(kid.signalCode, null)
@@ -83,8 +85,8 @@ test("an empty name signals nothing, prints nothing and fails", () => {
 
 test("a signal other than TERM or KILL is refused, not reported as denied", async () => {
   const { dir, bin } = fixture("memtest-sig")
-  const kid = spawn(bin, ["60"])
-  await wait(200)
+  const kid = spawn(bin, nap)
+  await wait(400)
   const r = spawnSync("python3", [script, "memtest-sig", "BOGUS"], { encoding: "utf8" })
   assert.equal(r.status, 2)
   assert.equal(r.stdout, "")
@@ -95,8 +97,8 @@ test("a signal other than TERM or KILL is refused, not reported as denied", asyn
 
 test("names with spaces, backslashes or regex characters match literally", async () => {
   const { dir, bin } = fixture("memtest-literal")
-  const kid = spawn(bin, ["60"])
-  await wait(200)
+  const kid = spawn(bin, nap)
+  await wait(400)
   for (const odd of ["memtest literal", "memtest-lit\\eral", "memtest-.*", "^memtest-literal$", "memtest-literal\\n"])
     assert.deepEqual(run(odd, "TERM"), [odd, "0", "0", ""], odd)
   assert.equal(kid.signalCode, null)
@@ -118,13 +120,13 @@ test("the script never signals itself", () => {
 test("with PIDs, only those of the row's processes are signalled, and a foreign PID never", async () => {
   const { dir, bin } = fixture("memtest-pids")
   const other = fixture("memtest-other")
-  const kids = [spawn(bin, ["60"]), spawn(bin, ["60"])]
-  const stranger = spawn(other.bin, ["60"])
-  await wait(200)
+  const kids = [spawn(bin, nap), spawn(bin, nap)]
+  const stranger = spawn(other.bin, nap)
+  await wait(400)
   // The stranger's PID is in the list (a reused PID): it is not one of the row's processes.
   const [name, ok] = run("memtest-pids", "TERM", String(kids[0].pid), String(stranger.pid))
   assert.deepEqual([name, ok], ["memtest-pids", "1"])
-  await wait(200)
+  await wait(400)
   assert.equal(kids[0].signalCode, "SIGTERM")
   assert.equal(kids[1].signalCode, null)
   assert.equal(stranger.signalCode, null)
